@@ -28,11 +28,21 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body bg-dark">
-                {{_('This action will start Plotman and launch a plotting run using your configured plotter. Be careful about running more than one plotter on a single machine at a time. Continue?')}}
+                {{_('This action will start Plotman and launch a plotting run using your configured plotter, into these directories:')}}
+                <div id="dirs" style="padding-top:10px; max-height: 350px; overflow-y: scroll">
+                    <div id="tmp_dirs" style="display:none; "></div>
+                    <div id="dst_dirs" style="display:none; "></div>
+                    <div id="arch_dirs" style="display:none; "></div>
+                </div>
+                <div class="alert alert-warning" role="error" id="dirs_error" style="display:none"></div>
+                {{_('Be careful about running more than one plotter on a single machine at a time. Continue?')}}
             </div>
-            <div class="modal-footer bg-dark">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancelStart">{{_('Cancel')}}</button>
-                <button type="button" class="btn btn-outline-success" id="btnConfirmStart">{{_('Start')}}</button>
+            <div class="modal-footer bg-dark justify-content-between">
+                <button type="button" class="btn btn-secondary mr-auto" onclick='PlottingLog();return false;'>{{_('View Log')}}</button>
+                <div>
+                    <button type="button" class="btn btn-secondary" style="padding-left: 5px;" data-bs-dismiss="modal" id="btnCancelStart">{{_('Cancel')}}</button>
+                    <button type="button" class="btn btn-outline-success" id="btnConfirmStart">{{_('Start')}}</button>
+                </div>
             </div>
         </div>
     </div>
@@ -48,9 +58,12 @@
             <div class="modal-body bg-dark">
                 {{_('This action will stop Plotman from launching new plotting jobs.  Running jobs will run to completion. Continue?')}}
             </div>
-            <div class="modal-footer bg-dark">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancelStop">{{_('Cancel')}}</button>
-                <button type="button" class="btn btn-outline-success" id="btnConfirmStop">{{_('Stop')}}</button>
+            <div class="modal-footer bg-dark justify-content-between">
+                <button type="button" class="btn btn-secondary mr-auto" onclick='PlottingLog();return false;'>{{_('View Log')}}</button>
+                <div>
+                    <button type="button" class="btn btn-secondary" style="padding-left: 5px;" data-bs-dismiss="modal" id="btnCancelStop">{{_('Cancel')}}</button>
+                    <button type="button" class="btn btn-outline-success" id="btnConfirmStop">{{_('Stop')}}</button>
+                </div>
             </div>
         </div>
     </div>
@@ -72,13 +85,15 @@
         </div>
     </div>
 </div>
+
 <div class="position-relative">
     <div class="position-absolute top-0 end-0" style="z-index: 2000; margin-top: -18px; margin-right: -8px;">
-      <a href="https://github.com/guydavis/machinaris/wiki/Plotman#plotting-view" target="_blank">
+        <a href="https://github.com/guydavis/machinaris/wiki/Plotman#plotting-view" target="_blank">
         <i class="fs-4 bi-question-circle"></i>
       </a>
     </div>
-  </div>
+</div>
+
 <style>
     a.active.nav-link {
         background-color: #3d3f42 !important
@@ -91,6 +106,9 @@
                 <a class="nav-link active" aria-current="page" href="{{ url_for('plotting_jobs') }}">{{_('Jobs')}}</a>
             </li>
             <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('plotting_transfers') }}">{{_('Transfers')}}</a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link" href="{{ url_for('plotting_workers') }}">{{_('Workers')}}</a>
             </li>
         </ul>
@@ -100,7 +118,7 @@
             <fieldset>
                 <b style="vertical-align: bottom; font-weight: 500">{{_('Plotting')}}: </b>
                 {% for plotter in plotters %}
-                <div class="btn-group">
+                <div class="btn-group" {% if loop.last %}style="padding-right:50px"{% endif %}>
                     <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown"
                         aria-expanded="false" id="{{ plotter.hostname }}_btn">
                         {{ plotter.displayname }}: 
@@ -121,14 +139,14 @@
                         <li>
                             <a class="dropdown-item text-white text-decoration-none" 
                                 data-bs-hostname="{{ plotter.hostname }}" 
-                                data-bs-blockchain="{{ worker.blockchain }}" 
+                                data-bs-blockchain="{{ worker.blockchain }}"
                                 href="#" {% 
                                 if worker.plotting_status == 'offline' %}
                                 data-bs-toggle="modal" data-bs-target="#disabledModal">
                                 <i class="fs-4 bi-dash-circle text-danger" title="{{_('Worker is offline.')}}"></i>
                                 {% elif worker.plotting_status == 'running' %}
                                 data-bs-toggle="modal" data-bs-target="#stopModal">
-                                <i class="fs-4 bi-pause-circle text-success" title="{{_('Stop Plotting')}}"></i>
+                                <i class="fs-4 bi-stop-circle text-success" title="{{_('Stop Plotting')}}"></i>
                                 {% else %}
                                 data-bs-toggle="modal" data-bs-target="#startModal">
                                 <i class="fs-4 bi-play-circle text-success" title="{{_('Start Plotting')}}"></i>
@@ -185,7 +203,7 @@
                             <td style="padding:0px">
                                 <!-- Careful, VS Code likes to wrap next line and break it. -->
                                 <a href="#" title="View Logs" onclick='PlottingLogs("plotting","{{ row['hostname'] }}","{{ row['fork'] }}","{{ row['plot_id'] }}");return false;'>
-                                    <i class="fs-4 bi-text-indent-left"></i>
+                                    <i class="fs-4 bi-file-text"></i>
                                 </a>
                             </td>
                         </tr>
@@ -207,8 +225,8 @@
         </div>
     </form>
 
+    {% for k_size in job_stats %}
     <div class="p-1 mb-4 bg-light border rounded-3">
-        {% for k_size in job_stats %}
         <div class="row">
             <div class="col" style="margin-top:5px; margin-bottom:5px;">
                 <div class="h-100 p-2 text-white">
@@ -218,11 +236,11 @@
         </div>
         <div class="row">
             <div class="col-12" style="margin-top:5px; margin-bottom:5px;">
-                <canvas id="k{{k_size}}_jobs"></canvas>
+                <canvas id="k{{k_size}}_jobs" height="400px" width="100%"></canvas>
             </div>
         </div>
-        {% endfor %}
     </div>
+    {% endfor %}
 
     {% endblock %}
 
@@ -264,6 +282,8 @@
             },
             borderWidth: 1,
             options: {
+                responsive: true,
+                maintainAspectRatio: false,
                 plugins: {  
                     legend: {
                         labels: {
@@ -278,6 +298,7 @@
                     x: {
                         type: 'time',
                         time: {
+                            unit: 'day',
                             tooltipFormat: 'DD T'
                         },
                         title: {
@@ -318,6 +339,9 @@
     </script>
     {% endfor %}
     <script>
+        function PlottingLog() {
+            PlottingLogs('plotting', document.getElementById('hostname').value, document.getElementById('blockchain').value);
+        }
         function PlottingLogs(type, hostname, blockchain, plot_id) {
             var d = new Date();
             var height = 600;
@@ -333,8 +357,66 @@
         function modal() {
             $('#modal_spinner').modal('show');
         }
+        function load_dirs(worker, blockchain) {
+            jqxhr = $.getJSON({
+                url: "{{ url_for('views_settings_config') }}?type=plotting_dirs&worker=" + worker + "&blockchain=" + blockchain,
+            })
+                .done(function (data) {
+                    if ('errors' in data) {
+                        $('#dirs_error').html("Wait! Plotman directory listing returned this error: <br/><pre>" + data['errors'] + '</pre> Please correct the problem before launching a plotting run!');
+                        $('#dirs_error').show();
+                    } else {
+                        $('#dirs_error').hide();
+                    }
+                    if ('response' in data) {
+                        html = "<h6>Temporary Directories</h6><ul>";
+                        for (dir of data['response']['temporary']) {
+                            html += "<li>" + dir['tmp'] + "</li>";
+                        }
+                        html += "</ul>";
+                        $("#tmp_dirs").html(html);
+                        if (data['response']['temporary'].length === 0) {
+                            $('#tmp_dirs').hide();
+                        } else {
+                            $('#tmp_dirs').show();
+                        }
+                        html = "<h6>Destination Directories (optional)</h6><ul>"
+                        for (dir of data['response']['destination']) {
+                            html += "<li>" + dir['dst'] + " (" + dir['plots'] + ' plots, ' + dir['gb_free'] + " GB free)</li>";
+                        }
+                        html += "</ul>"
+                        $("#dst_dirs").html(html);
+                        if (data['response']['destination'].length === 0) {
+                            $('#dst_dirs').hide();
+                        } else {
+                            $('#dst_dirs').show();
+                        }
+                        html = "<h6>Archiving Directories (optional)</h6><ul>"
+                        for (dir of data['response']['archiving']) {
+                            html += "<li>" + dir['dir'] + " (" + dir['gb_free'] + " GB free)</li>";
+                        }
+                        html += "</ul>";
+                        $("#arch_dirs").html(html);
+                        if (data['response']['archiving'].length === 0) {
+                            $('#arch_dirs').hide();
+                        } else {
+                            $('#arch_dirs').show();
+                        }
+                    } else {
+                        html = "<h6>Temporary Directories</h6><ul><li>?</li></ul>";
+                        $("#tmp_dirs").html(html);
+                        html = "<h6>Destination Directories (optional)</h6><ul><li>?</li></ul>"
+                        $("#dst_dirs").html(html);
+                        html = "<h6>Archiving Directories (optional)</h6><ul><li>?</li></ul>"
+                        $("#arch_dirs").html(html);
+                    }
+                }).fail(function (jqXHR, textStatus, errorThrown) {
+                    console.log("jqXHR, textStatus, errorThrown");
+                });
+        }
         $(document).ready(function () {
-            $('#data').DataTable({ 
+            $('#data').DataTable({
+                "stateSave": true, 
                 "columnDefs": [
                     { 
                         targets: [0,4,5,6,7,8,9,10,11,12,13,14,15,16,17], "orderable": false
@@ -395,9 +477,10 @@
             startModal.addEventListener('show.bs.modal', function (event) {
                 var button = event.relatedTarget
                 var hostname = button.getAttribute('data-bs-hostname')
-                var blockchain = button.getAttribute('data-bs-blockchain')
                 document.getElementById('hostname').value = hostname
+                var blockchain = button.getAttribute('data-bs-blockchain')
                 document.getElementById('blockchain').value = blockchain
+                load_dirs(hostname, blockchain);
             });
             var stopModal = document.getElementById('stopModal')
             stopModal.addEventListener('show.bs.modal', function (event) {

@@ -2,6 +2,169 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2023-06-28
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.8.2) to v1.8.2
+### Notes
+ - Bladebit still broken on ability to `ramplot` and `diskplot` as they try to match Gigahorse's GPU plotting. Still awaiting a fix...
+
+## [1.8.1] - 2023-05-17
+### Changed
+ - By default, exclude Gigahorse plots from automated plot check due to poor performance of the 'ProofOfSpace' binary.
+ - Fix for plotting manager issues when plotting with multiple tmp drives.
+### Updated
+ - [Bladebit](https://downloads.chia.net/bladebit/) to 3.0.0-alpha4. Status @ https://github.com/Chia-Network/bladebit/issues
+ - [BPX](https://github.com/bpx-network/bpx-blockchain/releases/tag/2.1.0) to v2.1.0
+ - [Cactus](https://github.com/Cactus-Network/cactus-blockchain/releases/tag/1.8.0) to v1.8.0
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.8.1) to v1.8.1
+ - [Flora](https://github.com/ageorge95/flora-blockchain/releases/tag/1.8.0_flora) to v1.8.0, updated by @ageorge95.
+ - [Gigahorse](https://github.com/madMAx43v3r/chia-gigahorse/releases/tag/v1.8.0.giga11) to v1.8.0.giga11.
+### Notes
+ - Bladebit still broken on ability to `ramplot` and `diskplot` as they try to match Gigahorse's GPU plotting. Still awaiting a fix...
+ - Support for new blockchains and tools DOES NOT imply my endorsement for them.  *Only run those you are comfortable with.*
+
+## [1.8.0] - 2023-05-04
+### Added
+ - Concurrent plot transfers to both remote and local archive paths. Previously was one plot transferred at a time.
+ - Checking for adequate free space on both tmp and dst paths before starting another plotting job.
+ - Replotting selection (Farming page settings) can now target uncompressed plots for deletion.
+### Changed
+ - Fix for Download button on Settings pages that were providing the wrong config file. Thanks @TuftyBruno.
+ - Updated German and Portuguese translations.  Thanks to @slowfinger and @antcasq. All contributions are appreciated.
+ - Follow Chia version numbers (like 1.8.0) from now on, as Machinaris is on their release cadence.
+### Updated 
+ - [Cactus](https://github.com/Cactus-Network/cactus-blockchain/releases/tag/1.7.1) to v1.7.1
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.8.0) to v1.8.0
+ - [Gigahorse](https://github.com/madMAx43v3r/chia-gigahorse/releases/tag/v1.8.0.giga10) to v1.8.0.giga10.
+ - [HDDCoin](https://github.com/HDDcoin-Network/hddcoin-blockchain/releases/tag/3.0.0-beta.1) to 3.0.0-beta1 based on Chia 1.7.0.
+ - [MMX](https://github.com/madMAx43v3r/mmx-node/releases/tag/v0.10.2) to (v0.10.2) on `testnet10`. 
+
+## [0.8.8] - 2023-03-23
+### Added
+ - Support for running a blockchain timelord with environment variable `mode` set to `fullnode,timelord`.
+ - Optional config setting to restart fork fullnodes if they consume too much memory. Looking at you Flora, HDDCoin, N-Chain, etc...
+### Changed
+ - On fresh install, optionally download (via libtorrent) a recent [Chia database checkpoint](https://www.chia.net/downloads/).
+ - Fixes for Gigahorse GPU plotting including 64 GB RAM mode using the `tmp3` SSD plotting path.
+ - Fix for Gigahorse Alerts, please reset [earlier broken settings file](https://github.com/guydavis/machinaris/blob/develop/config/chiadog/gigahorse.sample.yaml).
+ - Fix for container stop signal to cleanly shutdown forks too, as was already happening for Chia.
+### Updated 
+ - [Bladebit](https://downloads.chia.net/bladebit/) to 3.0.0-alpha3. Unstable, see: https://github.com/Chia-Network/bladebit/issues
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.7.1) to v1.7.1
+ - [Gigahorse](https://github.com/madMAx43v3r/chia-gigahorse/releases/tag/v1.6.2.giga7) to v1.6.2.giga7 with OpenCL support for AMD GPUs.
+ - [MMX](https://github.com/madMAx43v3r/mmx-node/releases/tag/v0.9.14) to (v0.9.14) on `testnet9`.  Supporting the latest AMD GPU driver.
+ - [One](https://github.com/xone-network/one-blockchain/releases/tag/1.7.0) to v1.7.0
+### Notes
+ - Bladebit has regressed on the ability to `ramplot` and `diskplot` as they try to match Gigahorse's GPU plotting. Still awaiting a fix...
+ - Support for new blockchains and tools DOES NOT imply my endorsement for them.  *Only run those you are comfortable with.*
+
+## [0.8.7] - 2023-02-16
+### Added
+ - Schedule plotting on the "Settings | Plotting" page to take advantage of off-peak electricity, lower your fan noise, avoid backups, etc...
+ - [Bladebit](https://github.com/guydavis/machinaris/wiki/Bladebit) - alpha GPU plotting support in main Machinaris image. Set `mode: gpuplot` under `bladebit` on Settings | Plotting page.
+ - [Gigahorse](https://github.com/guydavis/machinaris/wiki/Gigahorse) - beta GPU plotting and farming support in new Machinaris-Gigahorse image. Set `mode: gpuplot` under `madmax` on Settings | Plotting page.
+ - [Ballcoin](https://github.com/ball-network/ballcoin-blockchain) blockchain at version 1.6.0, another slow Silicoin fork.
+ - [Pipscoin](https://github.com/Pipscoin-Network/pipscoin-blockchain) blockchain at version 1.7.0.
+### Changed
+ - Fix missing Connections listing for Flax and MMX blockchains.  Thanks @ekersey!
+ - Fix for Bladebit ramplot relaunching.  Thanks @JoeZotacExperience!
+ - Multiple functionality & performance cleanups from excellent code review by @qoole.
+ - Display compression level for active plotting jobs on Gigahorse and MMX.
+### Updated 
+ - [BTCGreen](https://github.com/BTCgreen-Network/btcgreen-blockchain/releases/tag/1.7.0b) to v1.7.0b
+ - [Cactus](https://github.com/Cactus-Network/cactus-blockchain/releases/tag/1.6.2) to v1.6.2
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.7.0) to v1.7.0
+ - [Chives](https://github.com/HiveProject2021/chives-blockchain/releases/tag/1.5.4) to v1.5.4, including staking.
+ - [SHIBGreen](https://github.com/BTCgreen-Network/shibgreen-blockchain/releases/tag/1.7.0.1) to v1.7.0.1
+ - [Staicoin](https://github.com/STATION-I/stai-blockchain/releases/tag/1.3.0) to v1.3.0. Note, they require a fresh `config.yaml`.
+### Notes
+ - Support for new blockchains and tools DOES NOT imply my endorsement for them.  *Only run those you are comfortable with.*
+
+## [0.8.6] - 2023-01-03
+### Added
+ - Re-plotting: **Optional** background deletion of a few old plots to free space for new plotting. See Farming page, Settings icon, top-right.
+ - Table of recent plot archiving (local and remote) on new "Plotting | Transfers" page, including status and transfer speed.
+ - "Settings | Alerts" page: new 'Send Test Alert' button to validate Chiadog configs and receive sample alert to mail/discord/etc.
+ - [Coffee](https://github.com/Coffee-Network/coffee-blockchain) blockchain at version 1.0.1, a slow Silicoin fork.
+ - [GreenBTC](https://github.com/greenbtc/greenbtc-blockchain) blockchain at version 1.6.3, another slow Silicoin fork.
+ - [Moon](https://github.com/MOONCOINTEAM/moon-blockchain) blockchain at version 1.6.0, a recent Chia fork.
+ - [One](https://github.com/xone-network/one-blockchain) blockchain at version 1.6.2, a recent Chia fork.
+### Changed
+ - Fixed broken 'Generate/Import Key' actions for Chia 1.6.1 on Setup page. Thanks @SilverFolfy
+ - Missing plots on Farming page when a status.json file was corrupted. Thanks @Yurly
+ - Fix for duplicated Chiadog alerts of wallet additions. Thanks @GravitasProblem and @doma2345
+ - Improved "Settings | Pools" page with fee amount and `delete_unconfirmed_transactions` action.
+### Updated
+ - [Bladebit](https://github.com/Chia-Network/bladebit/releases/tag/v2.0.1) to v2.0.1
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.6.2) to v1.6.2
+ - [Chinilla](https://github.com/Chinilla/chinilla-blockchain/releases/tag/1.4.0) to v1.4.0
+ - [Chiadog](https://github.com/guydavis/chiadog/releases/tag/v0.7.5) to v0.7.5
+ - [Flax](https://github.com/Flax-Network/flax-blockchain/releases/tag/0.1.11) to v0.1.11
+ - [MMX](https://github.com/madMAx43v3r/mmx-node/releases/tag/v0.9.3) to (v0.9.3) on `testnet9`.  Supporting the latest AMD GPU driver.
+ - [Tad](https://github.com/BTCgreen-Network/tad-blockchain/releases/tag/1.7.0b2) to v1.7.0
+### Notes
+ - Support for new Chia forks DOES NOT imply my endorsement for them.  Only run those you are comfortable with.
+ - Incorrect reward recovery calculations for some blockchains.  Please use AllTheBlocks site if this affects you.
+
+## [0.8.5] - 2022-11-03
+### Added
+ - Wallets page - Claim Rewards button offers portable plot reward recovery after one week has elapsed. (EARLY BETA!)
+ - Chart memory usage per container (GiB) as well as total host memory usage (%) for OS and all apps.
+ - Enhanced Forktools to optionally decrease a blockchain's full_node process count, which greatly limits memory usage.
+ - Improve Plotting page to display configured tmp, dst, and archiving directories before starting to plot. Support `site_path_filter` for archive folders under `site_root`.
+ - Bladebit support for new `ramplot` mode (needs 416 GB RAM) 
+### Changed
+ - Enhance 'NFT Reward Recovery' tool to support v2 databases. 
+ - Fixes for invalid Chiadog harvester alerts. 
+ - Fixes for bladebit `diskplot` mode (less than 416 GB RAM, needs 400+GB of tmp disk) 
+### Updated
+ - [Bladebit](https://github.com/Chia-Network/bladebit/releases/tag/v2.0.0) to v2.0.0
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.6.1) to v1.6.1
+ - [Chinilla](https://github.com/Chinilla/chinilla-blockchain/releases/tag/1.3.0) to v1.3.0
+ - [Littlelambocoin](https://github.com/BTCgreen-Network/littlelambocoin-blockchain/releases/tag/1.6.1) to v1.6.1
+ - [Maize](https://github.com/Maize-Network/maize-blockchain/releases/tag/1.6.0) to v1.6.0
+ - [MMX](https://github.com/madMAx43v3r/mmx-node) to `testnet8`.
+### Known Issues
+ - Incorrect reward recovery calculations for some blockchains.  Please use AllTheBlocks site if this affects you.
+
+## [0.8.4] - 2022-09-21
+- Scaling-Down: Optional mode where wallets are synced daily, not run 24/7.  Saves ~35% memory so smaller farmers can farm more blockchains concurrently on the same machine. See Wallets page, top-right Settings.
+- Scaling-Up: Improved plot tracking efficiency for multi-PB sized farms. Thanks @grobalt!
+- Warnings for duplicated, invalid, or key-less plots.  See Farming page.
+- Update: [Flax](https://github.com/Flax-Network/flax-blockchain) to v0.1.10, [Cactus](https://github.com/Cactus-Network/cactus-blockchain) to v1.5.2, [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.6.0) to v1.6.0
+- Security: Disable Setup page's mnemonic import field autocomplete from caching value in your local browser. Thanks @Baatezu!
+- Fixes: Better handling of farmed block logging for certain blockchains like Apple & BPX, Alerts from Chia 1.5.1 for added coins missing due to blockchain logging changes.  Improved Smartctl response processing.
+
+## [0.8.3] - 2022-08-23
+ - Additional blockchain pricing from Vayamos and Posat exchanges on the Blockchains, Wallets, and Summary pages.
+ - New blockchains: [Apple](https://github.com/Apple-Network/apple-blockchain), [Chinilla](https://github.com/chinilla/chinilla-blockchain), [Gold](https://github.com/goldcoin-gl/gold-blockchain), [LittleLamboCoin](https://github.com/BTCgreen-Network/littlelambocoin-blockchain), [Mint](https://github.com/MintNetwork/mint-blockchain), [Tad](https://github.com/BTCgreen-Network/tad-blockchain), [Wheat](https://github.com/wheatnetwork/wheat-blockchain)
+ - Update: [BPX](https://github.com/bpx-network/bpx-blockchain) to v2.0.0, [BTCGreen](https://github.com/BTCgreen-Network/btcgreen-blockchain) to v1.5.0, [Maize](https://github.com/Maize-Network/maize-blockchain) to v1.5.0, [Petroleum](https://github.com/petroleum-network/petroleum-blockchain) to v1.0.16, [Shibgreen](https://github.com/BTCgreen-Network/shibgreen-blockchain) to v1.5.0
+ - Update:  [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.5.1) - v1.5.1, [Bladebit](https://github.com/Chia-Network/bladebit/tree/2.0.0-beta1) to v2.0.0 (beta-1) with diskplot mode (beta only in `:develop` and `:test` images)
+ - Fixes: Avoid timeout/slowness encountered by those with many drives, also many cold wallet transactions
+
+## [0.8.2] - 2022-07-24
+ - MMX - Record created blocks from blockchain logs, for display in Machinaris, off index page.
+ - Ubuntu - latest blockchains run on Jammy Jellyfish (Python 3.10), outdated blockchains run on Focal Fossa (Python 3.9).
+ - Updated: [Cactus](https://github.com/Cactus-Network/cactus-blockchain/releases/tag/1.4.1) to fix SSL certificate expiry, may require entire deletion of `mainnet` directory and full re-sync.  Check [their Discord](https://discord.gg/2Q8RcVacWP) for latest support of this blockchain.
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.5.0) - v1.5.0, patched into Machinaris v0.8.2 next day.
+
+## [0.8.1] - 2022-07-17
+ - Connections - add node peers directly from list offered by AllTheBlocks per blockchain.
+ - MMX - Compute "Estimated Time to Win" from plots size, netspace size, and blocks per day.
+ - New blockchains: [BPX](https://github.com/bpx-network/bpx-blockchain), [Ecostake](https://github.com/Ecostake-Network/ecostake-blockchain), [Petroleum](https://github.com/Petroleum-Network/petroleum-blockchain), and [Profit](https://github.com/ProfitCrypto/profit-blockchain)
+ - Updated: [Cactus](https://github.com/Cactus-Network/cactus-blockchain/releases/tag/1.4.0), [Chiadog](https://github.com/martomi/chiadog/releases/tag/v0.7.2)
+
+## [0.8.0] - 2022-06-30
+ - Charting of each blockchain's netspace, farmed coins, and wallet balances over the past month.
+ - Tracking farmed blocks sent directly to cold wallet. Set your cold wallet addresses on the Wallets page.
+ - Added a read-only transactions viewer for each blockchain's wallet, available from Wallets page.  
+ - Alerts: per-notifier [allow setting](https://github.com/guydavis/machinaris/wiki/ChiaDog#ignore-alerts) to allow only selected alerts, based on criteria.
+ - [Chia](https://github.com/Chia-Network/chia-blockchain/releases/tag/1.4.0) - v1.4.0, after a month of pre-release testing with Machinaris.
+ - [Cactus](https://github.com/Cactus-Network/cactus-blockchain) - v1.3.4, matches Chia 1.3.4, please run: `cactus db upgrade`
+ - [Chives](https://github.com/HiveProject2021/chives-blockchain) - v1.3.1, please run: `chives db upgrade`
+ - [Cryptodoge](https://github.com/CryptoDoge-Network/cryptodoge) - v1.3.4, matches Chia 1.3.4, please run: `cryptodoge db upgrade`
+ - [Flax](https://github.com/Flax-Network/flax-blockchain) - v0.1.9, matches Chia 1.4.0, please run: `flax db upgrade` if you haven't yet
+ - [MMX](https://github.com/madMAx43v3r/mmx-node) - updated version for their `testnet6` network.
+
 ## [0.7.2] - 2022-05-17
  - Drives monitoring page - allow [overrides of smartctl commands](https://github.com/guydavis/machinaris/wiki/Drives#override-command) for special hardware. Drive failure alerts thru our enhanced Chiadog.
  - Alerts: per-notifier [ignore setting](https://github.com/guydavis/machinaris/wiki/ChiaDog#ignore-alerts) to prevent unwanted alerts, based on criteria.
@@ -23,7 +186,8 @@ All notable changes to this project will be documented in this file. The format 
  - [Internationalization](https://github.com/guydavis/machinaris/wiki/Localization) for locale-specific text, numbers, and currencies.  Huge thanks to @antcasq (pt_PT) and @fabriziocacicia (it_IT) for providing translations!
  - Geolocation of peer connections for each blockchain by their IP address. [Optionally enabled](https://github.com/guydavis/machinaris/wiki/Connections) using a free Maxmind account.
  - [Flax](https://github.com/Flax-Network/flax-blockchain) - updated to v0.1.6, supporting new v2 DB format.
- - [Silicoin](https://github.com/silicoin-network/silicoin-blockchain) - supported again as per Discord votes.
+ - [HDDCoin](https://github.com/HDDcoin-Network/hddcoin-blockchain/releases) - update to version 2.0.2
+ - [Silicoin](https://github.com/silicoin-network/silicoin-blockchain) - v1.2.2, supported again as per Discord votes.
 
 ## [0.6.9] - 2022-02-04
  - [MMX](https://github.com/madMAx43v3r/mmx-node) - support for this new blockchain, which requires its own plot files.

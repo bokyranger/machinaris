@@ -56,6 +56,5 @@ def update():
                         })
             app.logger.debug(payload)
             utils.send_post('/partials/', payload, debug=False)
-        except:
-            app.logger.info("Failed to load recent partials and send.")
-            app.logger.info(traceback.format_exc())
+        except Exception as ex:
+            app.logger.info("Failed to load and send recent partials because {0}".format(str(ex)))

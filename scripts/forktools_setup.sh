@@ -3,15 +3,14 @@
 # Installs forktools - https://github.com/Qwinn1/forktools
 #
 
-# On 2021-12-01
-HASH=5df93f705f650cbd1379eee21efaeef8f6dc262a
-if [[ -z "${forktools_skip_build}" ]]; then
-	if [[ (${mode} == 'fullnode' || ${mode} =~ "harvester") && ${blockchains} != 'mmx' ]]; then
+FORKTOOLS_BRANCH=$1
+
+if [[ "${forktools_skip_build}" != 'true' ]]; then
+	if [[ (${mode} =~ ^fullnode.*  || ${mode} =~ "harvester") && ${blockchains} != 'mmx' && ${blockchains} != 'gigahorse' ]]; then
 		cd /
-		git clone https://github.com/Qwinn1/forktools
+		git clone --branch ${FORKTOOLS_BRANCH} https://github.com/guydavis/forktools.git
 		cd forktools
 		bash installft.sh
-		git checkout $HASH > /dev/null
 
 		mkdir -p /root/.chia/forktools/ftconfigs
 		cp -n ftconfigs/* /root/.chia/forktools/ftconfigs > /dev/null
@@ -26,16 +25,12 @@ if [[ -z "${forktools_skip_build}" ]]; then
 		source ~/.bashrc
 
 		# Now multiproc patch fullnodes to limit memory usage, but delay to offset resource crunch on launch
-		if [[ ${mode} == 'fullnode' ]]; then
-			sed -i "s/SETMAXLOGROTATION='99'/SETMAXLOGROTATION='7'/g" /root/.chia/forktools/ftconfigs/config.forkfixconfig*
-			sed -i "s/SETPLOTLOADFREQUENCY='18000'/SETPLOTLOADFREQUENCY='1800'/g" /root/.chia/forktools/ftconfigs/config.forkfixconfig*
-			sed -i "s/SETFNTARGETPEERCOUNT='80'/SETFNTARGETPEERCOUNT='20'/g"  /root/.chia/forktools/ftconfigs/config.forkfixconfig*
-			sed -i "s/\"/'/g" /root/.chia/forktools/ftconfigs/config.forkfixconfig
+		if [[ ${mode} =~ ^fullnode.* ]]; then
 			echo 'Y' | ./forkfixconfig all
   			sleep $[ ( $RANDOM % 300 )  + 1 ]s
-			./forkpatch all -multiproc
+			./forkpatch all -multiproc || true
   			sleep $[ ( $RANDOM % 600 )  + 1 ]s
-			./forkpatch all -logwinningplots
+			./forkpatch all -logwinningplots || true
 		fi
 	fi
 fi

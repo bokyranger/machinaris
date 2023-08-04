@@ -7,22 +7,17 @@ cd /ext9-blockchain
 
 . ./activate
 
-# farmr binary makes hard-coded assumptions about N-Chain locations, so create symlinks
-if [ ! -d /root/.ext9 ]; then
-  ln -s /root/.chia/ /root/.ext9 
-fi
-
-mkdir -p /root/.chia/ext9/log
-chia init >> /root/.chia/ext9/log/init.log 2>&1 
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.chia/ext9/db/blockchain_v1_ext9.sqlite ]] \
   && [[ ! -f /root/.chia/ext9/db/blockchain_v2_ext9.sqlite ]]; then
   mkdir -p /root/.chia/ext9/db/ && cd /root/.chia/ext9/db/
-  echo "Sorry, N-Chain does not offer a recent blockchain DB for download.  Standard sync will happen over a few days..."
-  echo "It is recommended to add some peer node connections on the Connections page of Machinaris from: https://alltheblocks.net/nchain"
+  echo "Sorry, N-Chain does not offer a recent blockchain DB for download.  Standard sync will happen over a few days."
+  echo "It is recommended to add some peer node connections on the Connections page of Machinaris."
 fi
+
+mkdir -p /root/.chia/ext9/log
+chia init >> /root/.chia/ext9/log/init.log 2>&1 
 
 echo 'Configuring NChain...'
 if [ -f /root/.chia/ext9/config/config.yaml ]; then
@@ -58,7 +53,7 @@ chmod 755 -R /root/.chia/ext9/config/ssl/ &> /dev/null
 chia init --fix-ssl-permissions > /dev/null 
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -69,7 +64,20 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  chia start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    chia start farmer-no-wallet
+  else
+    chia start farmer
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    chia start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.chia/ext9/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
@@ -87,7 +95,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.ext9/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8929/certificates/?type=nchain.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8929/certificates/?type=nchain.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -100,8 +108,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
     echo "Configuring farmer peer at ${farmer_address}:${farmer_port}"
-    chia configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    chia configure --enable-upnp false
+    chia configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.chia/mainnet/log/init.log
+    chia configure --enable-upnp false  2>&1 >> /root/.chia/mainnet/log/init.log
     chia start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

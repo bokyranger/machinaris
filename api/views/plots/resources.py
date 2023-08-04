@@ -26,16 +26,22 @@ STATUS_FILE = '/root/.chia/plotman/status.json'
 
 def open_status_json():
     status = {}
-    if os.path.exists(STATUS_FILE): 
-        with open(STATUS_FILE, 'r+') as fp:
-            status = json.load(fp)
+    try:
+        if os.path.exists(STATUS_FILE): 
+            with open(STATUS_FILE, 'r') as fp:
+                status = json.load(fp)
+    except Exception as ex:
+        app.logger.error("Failed to read JSON from {0} because {1}".format(STATUS_FILE, str(ex)))
     return status
 
 def analyze_status(plots_status, short_plot_id):
     if short_plot_id in plots_status:
         if "analyze" in plots_status[short_plot_id]:
             if plots_status[short_plot_id]['analyze'] and 'seconds' in plots_status[short_plot_id]['analyze']:
-                return plots_status[short_plot_id]['analyze']['seconds']
+                return '|'.join([
+                    plots_status[short_plot_id]['analyze']['host'], 
+                    plots_status[short_plot_id]['analyze']['seconds']
+                ])
             else:
                 return "-"
     return None
@@ -56,8 +62,7 @@ def lookup_worker_displayname(displaynames, hostname):
         displayname = displaynames[hostname]
     else: # Look up displayname
         try:
-            # '172.18.0.1' was non-local IP on OlivierLA75's Docker setup, inside his container
-            if hostname in ['127.0.0.1','172.18.0.1']:
+            if hostname in ['127.0.0.1']:
                 hostname = controller_hostname
             #app.logger.info("Found worker with hostname '{0}'".format(hostname))
             displayname = db.session.query(w.Worker).filter(w.Worker.hostname==hostname, 
@@ -119,10 +124,10 @@ class PlotByHostname(MethodView):
             # Skip any previously sent by existing plot_id
             if not db.session.query(Plot).filter(Plot.hostname==new_item['hostname'], 
                 Plot.plot_id==new_item['plot_id']).first():
-                short_plot_id = new_item['plot_id'][:8]
+                short_plot_id = new_item['plot_id']
                 item = Plot(**new_item)
-                item.plot_analyze = analyze_status(plots_status, short_plot_id)
-                item.plot_check = check_status(plots_status, short_plot_id)
+                item.plot_analyze = analyze_status(plots_status, short_plot_id[:8])
+                item.plot_check = check_status(plots_status, short_plot_id[:8])
                 items.append(item)
                 db.session.add(item)
         db.session.commit()
@@ -132,4 +137,13 @@ class PlotByHostname(MethodView):
     @blp.response(204)
     def delete(self, hostname, blockchain):
         db.session.query(Plot).filter(Plot.hostname==hostname, Plot.blockchain==blockchain).delete()
+        db.session.commit()
+
+@blp.route('/<hostname>/<blockchain>/<plot_file>')
+class PlotByHostnameBlockchainFile(MethodView):
+    
+    @blp.etag
+    @blp.response(204)
+    def delete(self, hostname, blockchain, plot_file):
+        db.session.query(Plot).filter(Plot.hostname==hostname, Plot.blockchain==blockchain, Plot.file==plot_file).delete()
         db.session.commit()

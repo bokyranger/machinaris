@@ -1,29 +1,33 @@
 #!/bin/env bash
 #
-# Installs Flora as per https://github.com/Flora-Network/flora-blockchain
+# Installs Flora as per https://github.com/ageorge95/flora-blockchain.git
 #
 
 FLORA_BRANCH=$1
-# On 2021-11-06
-HASH=f4da13dd7160de772ea5daa333984bed3882e84c
+# On 2023-05-06
+HASH=f3ee4b1a2c09c3449cab31bfb814b2551ae13b45
 
 if [ -z ${FLORA_BRANCH} ]; then
-	echo 'Skipping Flora install as not requested.'
+    echo 'Skipping Flora install as not requested.'
 else
-	rm -rf /root/.cache
-	git clone --branch ${FLORA_BRANCH} --single-branch https://github.com/Flora-Network/flora-blockchain.git /flora-blockchain
-	cd /flora-blockchain 
-	git submodule update --init mozilla-ca 
-	git checkout $HASH
-	chmod +x install.sh
-	# 2022-01-30: pip broke due to https://github.com/pypa/pip/issues/10825
-	sed -i 's/upgrade\ pip$/upgrade\ "pip<22.0"/' install.sh
-	/usr/bin/sh ./install.sh
+    rm -rf /root/.cache
+    git clone --branch ${FLORA_BRANCH} --single-branch https://github.com/ageorge95/flora-blockchain.git /flora-blockchain
+    cd /flora-blockchain 
+    git submodule update --init mozilla-ca 
+    git checkout $HASH
 
-	if [ ! -d /chia-blockchain/venv ]; then
-		cd /
-		rmdir /chia-blockchain
-		ln -s /flora-blockchain /chia-blockchain
-		ln -s /flora-blockchain/venv/bin/flora /chia-blockchain/venv/bin/chia
-	fi
+    # Log "Added Coins" at info, not debug level.  See: https://github.com/Chia-Network/chia-blockchain/issues/11955
+    sed -i -e 's/^        self.log.debug($/        self.log.info(/g' flora/wallet/wallet_state_manager.py
+
+    python -m venv venv
+    . ./venv/bin/activate
+    pip wheel --use-pep517  --use-deprecated=legacy-resolver --extra-index-url https://pypi.chia.net/simple/  -f . --wheel-dir=./build .
+    pip install --no-index --find-links=./build flora-blockchain
+
+    if [ ! -d /chia-blockchain/venv ]; then
+        cd /
+        rmdir /chia-blockchain
+        ln -s /flora-blockchain /chia-blockchain
+        ln -s /flora-blockchain/venv/bin/flora /chia-blockchain/venv/bin/chia
+    fi
 fi

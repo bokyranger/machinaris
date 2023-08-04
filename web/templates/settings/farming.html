@@ -30,8 +30,8 @@
         {% endif %}
         {% endwith %}
     </div>
-
-    <form method="POST">
+    <div class="alert alert-warning" style="display:none" role="alert" id='errors'></div>
+    <form method="POST" id="settings-form">
         <fieldset>
             <div class="row mb-3">
                 <label for="worker" class="col-sm-1 col-form-label-lg text-end p-1">{{_('Worker')}}</label>
@@ -48,15 +48,23 @@
                     <select id="blockchain" name="blockchain" class="form-select">
                     </select>
                 </div>
+                <div class="col-sm-3">
+                    <div id="loading_div" class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="mb-3" id="texteditor">
-                <textarea style="background: #D3D3D3;" class="form-control fs-6" id="config" name="config" rows="18"
+                <textarea style="background: #D3D3D3; font-family: monospace; font-size: 80%;" class="form-control" id="config" name="config" rows="35"
                     style="height:100%;"></textarea>
             </div>
-            <button type="submit" class="btn btn-outline-success">{{_('Save')}}</button>
+            <button type="submit" class="btn btn-outline-success"
+            id="btnSave">{{_('Save')}}</button>
             <button type="button" class="btn btn-outline-success"
-                onclick="downloadConfig(); return false">{{_('Download')}}</button>
-        </fieldset>
+            id="btnDownload">{{_('Download')}}</button>
+    </fieldset>
     </form>
 
     {% endblock %}
@@ -65,15 +73,33 @@
     <script>
         $(document).ready(function () {
             function load_config(worker, blockchain) {
+                $('#loading_div').show();
+                $("#config").prop('disabled', true);
+                $("#btnSave").prop('disabled', true);
+                $("#btnDownload").prop('disabled', true);
                 $.ajax({
                     type: "GET",
                     url: "{{ url_for('views_settings_config') }}?type=farming&worker=" + worker + "&blockchain=" + blockchain,
                 })
                     .done(function (data) {
-                        //console.log(data);
+                        var target_addresses = new Set();
+                        var reg = /_target_address\:\s?\w+/g;
+                        var matches = data.match(reg);
+                        if (matches) {
+                            for (match of matches){
+                                target_addresses.add(match.split(':')[1].trim())
+                            }
+                        }
+                        warn_if_target_address_is_unknown(blockchain, target_addresses);
                         $("#config").val(data)
+                        $('#loading_div').hide();
+                        $("#config").prop('disabled', false);
+                        $("#btnSave").prop('disabled', false);
+                        $("#btnDownload").prop('disabled', false);
                     }).fail(function (jqXHR, textStatus, errorThrown) {
+                        $('#loading_div').hide();
                         console.log(jqXHR, textStatus, errorThrown);
+                        alert("Failed to retrieve configuration in a timely fashion.  Please check server load and refresh this page.");
                     });
             }
             update_blockchain_options("{{selected_worker}}");
@@ -88,7 +114,42 @@
             //Call the function when the page loads
             load_config("{{selected_worker}}", "{{selected_blockchain}}");
         });
-
+        function warn_if_target_address_is_unknown(blockchain, target_addresses) {
+            const hot_addresses = new Map(); {% 
+        for hot_address_blockchain in hot_addresses.keys() %}
+            hot_addresses.set('{{hot_address_blockchain}}', '{{','.join(hot_addresses[hot_address_blockchain])}}'); {%
+         endfor %}
+            const cold_addresses = new Map(); {% 
+        for cold_address_blockchain in cold_addresses.keys() %}
+            cold_addresses.set('{{cold_address_blockchain}}', '{{','.join(cold_addresses[cold_address_blockchain])}}'); {% 
+        endfor %}
+            var unknown_target_addresses = [];
+            for (target_address of target_addresses) {
+                if (!hot_addresses.has(blockchain) || hot_addresses.get(blockchain).includes(target_address)) {
+                    continue;
+                }
+                if (!cold_addresses.has(blockchain) || cold_addresses.get(blockchain).includes(target_address)) {
+                    continue;
+                }
+                unknown_target_addresses.push(target_address);
+            }
+            if (unknown_target_addresses.length) {
+                var msg = "{{_('Config file contains target_address that is neither in your hot wallet (keys), nor in your configured cold wallet addresses.')}}";
+                msg += ' <ul>';
+                for (unknown_target_address of unknown_target_addresses) {
+                    msg += "<li>" + unknown_target_address + "</li>";
+                }
+                msg += '</ul>';
+                msg += "{{_('Your hot wallet key(s):')}}" + ' ' + hot_addresses.get(blockchain) + "<br/>";
+                msg += "{{_('Your cold wallet key(s):')}}" + ' ' + cold_addresses.get(blockchain) + "<br/>";
+                msg += "{{_('Please check your hot wallet addresses on the Keys page, and your cold wallet addresses on the Wallets page.')}}";
+                $('#errors').html(msg);
+                $('#errors').show();
+            }
+            else {
+                $('#errors').hide();
+            }
+        }
         function update_blockchain_options(hostname) {
             var hostsMap = {};
             {% for worker in workers() %}
@@ -110,11 +171,17 @@
                 $el.append(option);
             };
         }
-
-        function downloadConfig() {
+        $("#btnSave").click(function () {
+            $(this).prop("disabled", true);
+            $(this).html(
+                `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {{_('Saving...')}}`
+            );
+            $("#settings-form").submit();
+        });
+        $("#btnDownload").click(function () {
             worker = $("#worker").val()
             blockchain = $("#blockchain").val()
-            window.location.href = '/settings/config/' + worker + '_' + blockchain + '_config.yaml?type=farming&worker=' + worker + "&blockchain=" + blockchain
-        }
+            window.location.href = '/settings/config/' + worker + '_' + blockchain + '_farming_config.yaml?type=farming&worker=' + worker + "&blockchain=" + blockchain
+        });
     </script>
     {% endblock %}

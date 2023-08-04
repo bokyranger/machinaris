@@ -11,7 +11,7 @@ from api.extensions.api import Blueprint
 
 from api.commands import chiadog_cli, chia_cli, plotman_cli, pools_cli
 from api.schedules import status_worker, status_plotting, status_farm, \
-    status_alerts, status_connections, status_pools, status_plotnfts
+    status_alerts, status_connections, status_pools, status_plotnfts, status_archiving
 
 blp = Blueprint(
     'Action',
@@ -24,6 +24,7 @@ blp = Blueprint(
 class Actions(MethodView):
 
     def post(self):
+        app.logger.info("Received /actions request with {0}".format(request.data))
         try:
             body = json.loads(request.data)
             service = body['service']
@@ -33,7 +34,7 @@ class Actions(MethodView):
             if service in ["plotting", "archiving"]:
                 plotman_cli.dispatch_action(body)
                 msg = "Plotman action completed."
-            elif service in [ "farming", "networking" ]:
+            elif service in [ "farming", "networking", "wallet" ]:
                 chia_cli.dispatch_action(body)
                 msg = "Blockchain action completed."
             elif service == "monitoring":
@@ -46,8 +47,10 @@ class Actions(MethodView):
             # Now trigger updates after a delay
             time.sleep(17)
             status_worker.update()
-            if service in ["plotting", "archiving"]:
+            if service == "plotting":
                 status_plotting.update()
+            elif service == "archiving":
+                status_archiving.update()
             elif service == "farming":
                 status_farm.update()
             elif service == "networking":
@@ -60,5 +63,5 @@ class Actions(MethodView):
             time.sleep(3) # Time for status update to reach database
             return make_response(msg, 200)
         except Exception as ex:
-            app.logger.info(traceback.format_exc())
+            app.logger.error(traceback.format_exc())
             return str(ex), 400

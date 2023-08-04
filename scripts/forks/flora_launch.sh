@@ -5,27 +5,25 @@
 
 cd /flora-blockchain
 
-. ./activate
+. ./venv/bin/activate
 
 # Only the /root/.chia folder is volume-mounted so store flora within
 mkdir -p /root/.chia/flora
 rm -f /root/.flora
 ln -s /root/.chia/flora /root/.flora 
 
-mkdir -p /root/.flora/mainnet/log
-flora init >> /root/.flora/mainnet/log/init.log 2>&1 
-
 # Check for first launch (missing mainnet folder and download)
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.flora/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
   && [[ ! -f /root/.flora/mainnet/db/blockchain_v2_mainnet.sqlite ]]; then
-  echo "Downloading Flora blockchain DB (many GBs in size) on first launch..."
-  echo "Please be patient as takes minutes now, but saves days of syncing time later."
   mkdir -p /root/.flora/mainnet/db/ && cd /root/.flora/mainnet/db/
-  # Latest Blockchain DB download as per the Flora Discord #info
-  curl -skLJO https://floracoin.farm/downloads/blockchain_v1_mainnet.sqlite
+  echo "Sorry, Flora does not offer a recent blockchain DB for download.  Standard sync will happen over a few days."
+  echo "It is recommended to add some peer node connections on the Connections page of Machinaris."
 fi
+
+mkdir -p /root/.flora/mainnet/log
+flora init >> /root/.flora/mainnet/log/init.log 2>&1 
 
 echo 'Configuring Flora...'
 if [ -f /root/.flora/mainnet/config/config.yaml ]; then
@@ -35,12 +33,16 @@ if [ -f /root/.flora/mainnet/config/config.yaml ]; then
 fi
 
 # Loop over provided list of key paths
+label_num=0
 for k in ${keys//:/ }; do
   if [[ "${k}" == "persistent" ]]; then
     echo "Not touching key directories."
   elif [ -s ${k} ]; then
-    echo "Adding key at path: ${k}"
-    flora keys add -f ${k} > /dev/null
+    echo "Adding key #${label_num} at path: ${k}"
+    flora keys add -l "key_${label_num}" -f ${k} > /dev/null
+    ((label_num=label_num+1))
+  elif [[ ${mode} =~ ^fullnode.* ]]; then
+    echo "Skipping 'chia keys add' as no file found at: ${k}"
   fi
 done
 
@@ -56,7 +58,7 @@ chmod 755 -R /root/.flora/mainnet/config/ssl/ &> /dev/null
 flora init --fix-ssl-permissions > /dev/null 
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -67,7 +69,20 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  flora start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    flora start farmer-no-wallet
+  else
+    flora start farmer
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    flora start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.flora/mainnet/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
@@ -85,7 +100,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.flora/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8932/certificates/?type=flora.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8932/certificates/?type=flora.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -97,8 +112,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "Did not find your farmer's certificates within /root/.flora/farmer_ca."
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
-    flora configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    flora configure --enable-upnp false
+    flora configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.flora/mainnet/log/init.log
+    flora configure --enable-upnp false  2>&1 >> /root/.flora/mainnet/log/init.log
     flora start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

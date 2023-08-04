@@ -14,6 +14,7 @@
     {% endif %}
     <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    {% block header %}{% endblock %}
 </head>
 
 <body>
@@ -194,9 +195,10 @@
         src="{{ url_for('static', filename='3rd_party/jquery.dataTables.js') }}"></script>
     <script type="text/javascript" charset="utf8"
         src="{{ url_for('static', filename='3rd_party/dataTables.bootstrap5.js') }}"></script>
-    <script src="{{ url_for('static', filename='3rd_party/chart.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='3rd_party/chart.umd.min.js') }}"></script>
     <script src="{{ url_for('static', filename='3rd_party/luxon.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='3rd_party/chartjs-adapter-luxon.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='3rd_party/chartjs-adapter-luxon.umd.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='3rd_party/chartjs-plugin-datalabels.min.js') }}"></script>
     <script src="{{ url_for('static', filename='3rd_party/leaflet.js') }}"></script>
     <script src="{{ url_for('static', filename='3rd_party/leaflet-layervisibility.js') }}"></script>
     {% block scripts %}{% endblock %}

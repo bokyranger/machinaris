@@ -27,15 +27,15 @@ from api.models import mmx
 def load_farm_info(blockchain):
     mmx_binary = globals.get_blockchain_binary(blockchain)
     if globals.farming_enabled():
-        proc = Popen("{0} farm info && {0} wallet show && {0} node info".format(mmx_binary), stdout=PIPE, stderr=PIPE, shell=True)
+        proc = Popen("{0} farm info && {0} wallet show balance && {0} node info".format(mmx_binary), stdout=PIPE, stderr=PIPE, shell=True)
         try:
             outs, errs = proc.communicate(timeout=90)
+            if errs:
+                app.logger.debug("Error from {0} farm summary because {1}".format(blockchain, outs.decode('utf-8')))
         except TimeoutExpired:
             proc.kill()
             proc.communicate()
-            abort(500, description="The timeout is expired!")
-        if errs:
-            app.logger.debug("Error from {0} farm summary because {1}".format(blockchain, outs.decode('utf-8')))
+            raise Exception("The timeout is expired!")
         return mmx.FarmSummary(outs.decode('utf-8').splitlines(), blockchain)
     elif globals.harvesting_enabled():
         return mmx.HarvesterSummary()
@@ -59,18 +59,18 @@ def list_plots():
 
 def load_config(blockchain):
     mainnet = globals.get_blockchain_network_path(blockchain)
-    test = globals.MMX_CONFIG
-    return open(f'{mainnet}/config/{test}/Farmer.json','r').read()
+    test = globals.get_blockchain_network_name(blockchain)
+    return open(f'{mainnet}/../config/{test}/Farmer.json','r').read()
 
 def save_config(config, blockchain):
     try:
         mainnet = globals.get_blockchain_network_path(blockchain)
-        test = globals.MMX_CONFIG
+        test = globals.globals.get_blockchain_network_name(blockchain)
         # Validate the json first
         json.load(config)
         # Save a copy of the old config file
-        src=f'{mainnet}/config/{test}/Farmer.json'
-        dst=f'{mainnet}/config/{test}/Farmer.json' + time.strftime("%Y%m%d-%H%M%S")+".yaml"
+        src=f'{mainnet}/../config/{test}/Farmer.json'
+        dst=f'{mainnet}/../config/{test}/Farmer.json' + time.strftime("%Y%m%d-%H%M%S")+".yaml"
         shutil.copy(src,dst)
         # Now save the new contents to main config file
         with open(src, 'w') as writer:
@@ -86,12 +86,12 @@ def load_wallet_show(blockchain):
     proc = Popen("({0} node info | grep Synced) && {0} wallet show".format(mmx_binary), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            raise Exception(errs.decode('utf-8'))
     except TimeoutExpired:
         proc.kill()
         proc.communicate()
-        abort(500, description="The timeout is expired!")
-    if errs:
-        abort(500, description=errs.decode('utf-8'))
+        raise Exception("The timeout is expired!")
     return mmx.Wallet(outs.decode('utf-8'))
 
 def load_blockchain_show(blockchain):
@@ -99,12 +99,12 @@ def load_blockchain_show(blockchain):
     proc = Popen("{0} node info".format(mmx_binary), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            raise Exception(errs.decode('utf-8'))
     except TimeoutExpired:
         proc.kill()
         proc.communicate()
-        abort(500, description="The timeout is expired!")
-    if errs:
-        abort(500, description=errs.decode('utf-8'))
+        raise Exception("The timeout is expired!")
     return mmx.Blockchain(outs.decode('utf-8').splitlines())
 
 def load_connections_show(blockchain):
@@ -112,12 +112,12 @@ def load_connections_show(blockchain):
     proc = Popen("{0} node peers".format(mmx_binary), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            raise Exception(errs.decode('utf-8'))
     except TimeoutExpired:
         proc.kill()
         proc.communicate()
-        abort(500, description="The timeout is expired!")
-    if errs:
-        abort(500, description=errs.decode('utf-8'))
+        raise Exception("The timeout is expired!")
     return mmx.Connections(outs.decode('utf-8').splitlines())
 
 def load_keys_show(blockchain):
@@ -125,10 +125,10 @@ def load_keys_show(blockchain):
     proc = Popen("{0} wallet keys".format(mmx_binary), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            raise Exception(errs.decode('utf-8'))
     except TimeoutExpired:
         proc.kill()
         proc.communicate()
-        abort(500, description="The timeout is expired!")
-    if errs:
-        abort(500, description=errs.decode('utf-8'))
+        raise Exception("The timeout is expired!")
     return mmx.Keys(outs.decode('utf-8').splitlines())

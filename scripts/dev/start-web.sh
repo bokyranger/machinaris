@@ -13,7 +13,7 @@ if [ ! -d /code/machinaris/web/static/3rd_party ]; then
     JS_LIBS_BASEPATH=/code/machinaris/web/static/3rd_party . ./scripts/pull_3rd_party_libs.sh
 fi
 
-if [ $FLASK_ENV == "development" ];
+if [ -n $FLASK_DEBUG ];
 then
     LOG_LEVEL='debug'
     RELOAD='--reload'
@@ -28,6 +28,5 @@ fi
     --log-level=$LOG_LEVEL \
     --workers=1 \
     --threads=12 \
-    --access-logfile - \
-    --error-logfile - \
+    --log-config scripts/dev/web_log.conf \
     web:app

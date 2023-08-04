@@ -7,7 +7,7 @@ on:
 
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       -
         name: Checkout
@@ -33,14 +33,18 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           file: docker/dockerfile
           context: .
           platforms: linux/amd64
+          provenance: false
           push: true
           build-args: |
+            "UBUNTU_VER=focal"
             "MACHINARIS_STREAM=develop"
+            "CHIADOG_BRANCH=dev"
+            "FDCLI_BRANCH=dev"
             "CRYPTODOGE_BRANCH=main"
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/machinaris-cryptodoge:develop

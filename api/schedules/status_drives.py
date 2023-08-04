@@ -43,6 +43,6 @@ def update():
                         "smart_info": drive.smart_info,
                     })
             utils.send_post('/drives/', payload, debug=False)
-        except:
-            app.logger.info("Failed to load and send drive status.")
-            app.logger.info(traceback.format_exc())
+        except Exception as ex:
+            app.logger.info("Failed to load and send drives status because {0}".format(str(ex)))
+            traceback.print_exc()

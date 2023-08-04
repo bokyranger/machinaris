@@ -12,23 +12,16 @@ mkdir -p /root/.chia/chives
 rm -f /root/.chives
 ln -s /root/.chia/chives /root/.chives
 
-mkdir -p /root/.chives/mainnet/log
-chives init >> /root/.chives/mainnet/log/init.log 2>&1 
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.chives/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
   && [[ ! -f /root/.chives/mainnet/db/blockchain_v2_mainnet.sqlite ]]; then
-  /usr/bin/bash /machinaris/scripts/megacmd_setup.sh > /tmp/megacmd_setup.log 2>&1
-  echo "Downloading Chives blockchain DB (many GBs in size) on first launch..."
-  echo "Please be patient as takes minutes now, but saves days of syncing time later."
-  mkdir -p /root/.chives/mainnet/db/ && cd /root/.chives/mainnet/db/
-  # Mega links for Chives blockchain DB from: https://node-hk.chivescoin.org/
-  mega-get https://mega.nz/file/GghihBYS#OrSOWVD7-zYbMldUmAnojAGTFGZDd3ktsgYa3DX_QkU
-  unzip chives-database*.zip 
-  mv chives-database*/blockchain_v1_mainnet.sqlite .
-  rm -rf chives-database*
+  echo "Sorry, Chives does not offer a recent blockchain DB for download.  Standard sync will happen over a few days."
+  echo "It is recommended to add some peer node connections on the Connections page of Machinaris."
 fi
+
+mkdir -p /root/.chives/mainnet/log
+chives init >> /root/.chives/mainnet/log/init.log 2>&1 
 
 echo 'Configuring Chives...'
 if [ -f /root/.chives/mainnet/config/config.yaml ]; then
@@ -55,7 +48,7 @@ for p in ${plots_dir//:/ }; do
 done
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -66,7 +59,24 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  chives start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    chives start farmer-no-wallet
+  else
+    chives start farmer
+    if [[ ${chives_masternode} == "true" ]]; then
+      echo "Starting Chives masternode in a minute..."
+      sleep 60 && chives start masternode
+    fi
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    chives start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.chives/mainnet/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
@@ -84,7 +94,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.chives/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8931/certificates/?type=chives.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8931/certificates/?type=chives.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -94,8 +104,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "Did not find your farmer's certificates within /root/.chives/farmer_ca."
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
-    chives configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    chives configure --enable-upnp false
+    chives configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.chives/mainnet/log/init.log
+    chives configure --enable-upnp false  2>&1 >> /root/.chives/mainnet/log/init.log
     chives start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

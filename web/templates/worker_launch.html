@@ -53,7 +53,7 @@
                     </div>
                     <div class="col-sm">
                         <label for="volume_container_path0" class="form-label">{{_('Container Path')}}</label>
-                        <input type="text" class="form-control" placeholder="/plots" onkeyup="updateDocker()" 
+                        <input type="text" class="form-control" placeholder="/plots" onkeyup="updateDocker()"
                             name="volume_container_path" id="volume_container_path0" aria-label="volume_container_path0">
                     </div>
                     <div class="col-auto">
@@ -155,6 +155,15 @@
         }
 
         function lookup_worker_port(blockchain) {
+            if (blockchain == 'apple') {
+                return 8947;
+            }
+            if (blockchain == 'ballcoin') {
+                return 8957;
+            }
+            if (blockchain == 'bpx') {
+                return 8945;
+            }
             if (blockchain == 'btcgreen') {
                 return 8938;
             }
@@ -164,11 +173,20 @@
             if (blockchain == 'chia') {
                 return 8927;
             }
+            if (blockchain == 'chinilla') {
+                return 8948;
+            }
             if (blockchain == 'chives') {
                 return 8931;
             }
+            if (blockchain == 'coffee') {
+                return 8954;
+            }
             if (blockchain == 'cryptodoge') {
                 return 8937;
+            }
+            if (blockchain == 'ecostake') {
+                return 8942;
             }
             if (blockchain == 'flora') {
                 return 8932;
@@ -176,17 +194,47 @@
             if (blockchain == 'flax') {
                 return 8928;
             }
+            if (blockchain == 'gigahorse') {
+                return 8959;
+            }
+            if (blockchain == 'gold') {
+                return 8949;
+            }
+            if (blockchain == 'greenbtc') {
+                return 8955;
+            }
             if (blockchain == 'hddcoin') {
                 return 8930;
             }
-            if (blockchain == 'nchain') {
-                return 8929;
+            if (blockchain == 'littlelambocoin') {
+                return 8946;
             }
             if (blockchain == 'maize') {
                 return 8933;
             }
+            if (blockchain == 'mint') {
+                return 8950;
+            }
             if (blockchain == 'mmx') {
                 return 8940;
+            }
+            if (blockchain == 'moon') {
+                return 8953;
+            }
+            if (blockchain == 'nchain') {
+                return 8929;
+            }
+            if (blockchain == 'one') {
+                return 8956;
+            }
+            if (blockchain == 'petroleum') {
+                return 8943;
+            }
+            if (blockchain == 'pipscoin') {
+                return 8958;
+            }
+            if (blockchain == 'profit') {
+                return 8944;
             }
             if (blockchain == 'shibgreen') {
                 return 8939;
@@ -200,10 +248,25 @@
             if (blockchain == 'stor') {
                 return 8935;
             }
+            if (blockchain == 'tad') {
+                return 8951;
+            }
+            if (blockchain == 'wheat') {
+                return 8952;
+            }
             alert("Unknown blockchain fork of selected: " + blockchain);
         }
 
         function lookup_farmer_port(blockchain) {
+            if (blockchain == 'apple') {
+                return 26667;
+            }
+            if (blockchain == 'ballcoin') {
+                return 38891;
+            }
+            if (blockchain == 'bpx') {
+                return 27914;
+            }
             if (blockchain == 'btcgreen') {
                 return 18655;
             }
@@ -213,11 +276,20 @@
             if (blockchain == 'chia') {
                 return 8447;
             }
+            if (blockchain == 'chinilla') {
+                return 43447;
+            }
             if (blockchain == 'chives') {
                 return 9647;
             }
+            if (blockchain == 'coffee') {
+                return 33847;
+            }
             if (blockchain == 'cryptodoge') {
                 return 16895;
+            }
+            if (blockchain == 'ecostake') {
+                return 38441;
             }
             if (blockchain == 'flax') {
                 return 6885;
@@ -225,17 +297,47 @@
             if (blockchain == 'flora') {
                 return 18647;
             }
+            if (blockchain == 'gigahorse') {
+                return 28745;
+            }
+            if (blockchain == 'gold') {
+                return 14447;
+            }
+            if (blockchain == 'greenbtc') {
+                return 23332;
+            }
             if (blockchain == 'hddcoin') {
                 return 28447;
             }
-            if (blockchain == 'nchain') {
-                return 38447;
+            if (blockchain == 'littlelambocoin') {
+                return 18981;
             }
             if (blockchain == 'maize') {
                 return 8647;
             }
+            if (blockchain == 'mint') {
+                return 29227;
+            }
             if (blockchain == 'mmx') {
                 return 11330;
+            }
+            if (blockchain == 'moon') {
+                return 26882;
+            }
+            if (blockchain == 'nchain') {
+                return 38447;
+            }
+            if (blockchain == 'one') {
+                return 11113;
+            }
+            if (blockchain == 'petroleum') {
+                return 33347;
+            }
+            if (blockchain == 'pipscoin') {
+                return 16339;
+            }
+            if (blockchain == 'profit') {
+                return 48447;
             }
             if (blockchain == 'shibgreen') {
                 return 18974;
@@ -249,24 +351,33 @@
             if (blockchain == 'stor') {
                 return 8337;
             }
+            if (blockchain == 'tad') {
+                return 4447;
+            }
+            if (blockchain == 'wheat') {
+                return 21447;
+            }
             alert("{{_('Unknown blockchain fork of selected:')}} " + blockchain);
         }
 
         function updateDockerCompose(errors) {
             var line_end = '\n';
             var os = getRadioButtonValue('os')
+            var gpu_type = $('#gpu_type').val()
+            var gpu_blockchain = $('#gpu_blockchain').val()
             cmd = "version: '3.7'" + line_end;
             cmd += "services:"  + line_end + line_end;
 
             var blockchains = document.getElementsByName('blockchains');
             var worker_port = 8928;
+            var is_first_loop_pass = true;
             for(var i = 0; i < blockchains.length; ++i) {
                 if (blockchains[i].checked) {
                     var blockchain = blockchains[i].value
-                    if (!document.getElementById('mode-harvester').checked && 
+                    if (!document.getElementById('mode-harvester').checked &&
                             document.getElementById('mode-plotter').checked &&
-                            blockchain != "chia" && blockchain != "chives") {
-                        continue;  // Don't add plotter-only containers for forks beyond Chia & Chives
+                            blockchain != "chia" && blockchain != "chives" && blockchain != "gigahorse" && blockchain != "mmx") {
+                        continue;  // Don't add plotter-only containers for forks beyond Chia & Chives & MMX & Gigahorse
                     }
                     if (blockchain == "chia") {
                         cmd += "    machinaris:" + line_end;
@@ -280,7 +391,7 @@
                     if (document.getElementById("worker_hostname").value) {
                         cmd += '        hostname: ' + document.getElementById("worker_hostname").value + line_end;
                     }
-                    else if (i == 0) {
+                    else if (is_first_loop_pass) {
                         errors.push("{{_('Missing worker hostname.  Please provide a short name to identify your worker.')}}");
                     }
                     cmd += '        restart: always' + line_end;
@@ -299,10 +410,10 @@
                         if (os == 'windows' && ($('#volume_location' + index).val() == 'remote')) {
                             remote_windows_shares.push(volume_host_path + ':' + volume_container_path);
                         } else {
-                            if (i == 0) { // Record error on first pass
+                            if (is_first_loop_pass) { // Record error on first pass
                                 if (volume_host_path.endsWith(':')) {
                                     errors.push("{{_('Invalid host path ending with colon. Try adding a slash to the end like this')}} " + volume_host_path + '/');
-                                } 
+                                }
                                 if (!volume_host_path) {
                                     errors.push("{{_('Empty host path provided for volume at ')}}" + volume_container_path + "'. {{_('Please provide a host path.')}}");
                                 } else if (!volume_container_path) {
@@ -311,6 +422,9 @@
                             }
                             if ((blockchain == "chives") && ($('#volume_type' + index).val() == 'plots')) {
                                 volume_host_path += '/chives'
+                            }
+                            if ((blockchain == "gigahorse") && ($('#volume_type' + index).val() == 'plots')) {
+                                volume_host_path += '/gigahorse'
                             }
                             if ((blockchain == "mmx") && ($('#volume_type' + index).val() == 'plots')) {
                                 volume_host_path += '/mmx'
@@ -330,7 +444,7 @@
                         var farmer_port = lookup_farmer_port(blockchain);
                         cmd += '            - farmer_port=' + farmer_port + line_end;
                     }
-                    if ((blockchain == "chia" || blockchain == "chives") && (document.getElementById('mode-plotter').checked)) {
+                    if ((blockchain == "chia" || blockchain == "chives" || blockchain == "gigahorse" || blockchain == "mmx") && (document.getElementById('mode-plotter').checked)) {
                         if (mode) {
                             mode += ',plotter';
                         }
@@ -351,13 +465,13 @@
                         cmd += '            - mode=' + mode + line_end;
                         cmd += '            - controller_host=' + document.getElementById("controller_host").value + line_end;
                         cmd += '            - controller_api_port=' + document.getElementById("controller_api_port").value + line_end;
-                    } else if (i == 0) { // fullnode
+                    } else if (is_first_loop_pass) { // fullnode
                         errors.push("{{_('Neither Harvester or Plottter mode selected.  Please choose one or both.')}}");
                     }
                     if (document.getElementById("ip_addr").value) {
                         cmd += '            - worker_address=' + document.getElementById("ip_addr").value + line_end;
                     }
-                    else if (i == 0) {
+                    else if (is_first_loop_pass) {
                         errors.push("{{_('Missing worker IP address.  Please provide the IP the controller will connect to for commands.')}}");
                     }
                     var worker_port = lookup_worker_port(blockchain);
@@ -371,6 +485,40 @@
                     if (remote_windows_shares.length > 0) {
                         cmd += '            - remote_shares=' + remote_windows_shares.join() + line_end;
                     }
+                    // Add new environment variables above this section as it has both env vars and runtime and devices etc
+                    if (blockchain == gpu_blockchain) {
+                        if (gpu_type == 'nvidia') {
+                            cmd += '            - OPENCL_GPU=nvidia' + line_end;
+                            cmd += '            - NVIDIA_VISIBLE_DEVICES=all' + line_end;
+                            cmd += '            - NVIDIA_DRIVER_CAPABILITIES=compute,utility' + line_end;
+                            cmd += '        runtime: nvidia' + line_end;
+                        }
+                        else if (gpu_type == 'amd') {
+                            if (gpu_blockchain == 'chia') {
+                                errors.push("{{_('Currently Chia and Bladebit require a Nvidia GPU.  Other cards are not supported unfortunately.')}}");
+                            }
+                            else {
+                                cmd += '            - OPENCL_GPU=amd' + line_end;
+                                cmd += '            - ROC_ENABLE_PRE_VEGA=1' + line_end;
+                                cmd += '        devices:' + line_end;
+                                cmd += '            - "/dev/kfd:/dev/kfd"' + line_end;
+                                cmd += '            - "/dev/dri/:/dev/dri/"' + line_end;
+                            }
+                        }
+                        else if (gpu_type == 'intel') {
+                            if (gpu_blockchain == 'chia') {
+                                errors.push("{{_('Currently Chia and Bladebit require a Nvidia GPU.  Other cards are not supported unfortunately.')}}");
+                            }
+                            else if (gpu_blockchain == 'gigahorse') {
+                                errors.push("{{_('Currently Gigahorse requires a Nvidia or AMD GPU.  Intel cards are not supported unfortunately.')}}");
+                            }
+                            else {
+                                cmd += '            - OPENCL_GPU=intel' + line_end;
+                                cmd += '        devices:' + line_end;
+                                cmd += '            - "/dev/dri/:/dev/dri/"' + line_end;
+                            }
+                        }
+                    }
                     cmd += '        ports:' + line_end;
                     if (blockchain == "chia") {
                         cmd += '            - 8926:8926' + line_end;
@@ -383,15 +531,16 @@
                         cmd += '            - DAC_READ_SEARCH' + line_end;
                     }
                     cmd += line_end;
+                    is_first_loop_pass = false;
                 }
             }
             return cmd;
         }
-        function valid_ip_addr(ipaddress) {  
-            if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ipaddress)) {  
-                return (true)  
-            }  
-            return (false)  
+        function valid_ip_addr(ipaddress) {
+            if (/^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/.test(ipaddress)) {
+                return (true)
+            }
+            return (false)
         }
         $(document).ready(function () {
             $('#plotting_keys_row').hide();
@@ -520,8 +669,29 @@
             </div>
             <div class="row mb-3" id="blockchains_row">
                 <div class="col offset">
-                    <label for="inputState" class="form-label">{{_('Blockchains to Farm')}}</label>
+                    <label for="inputState" class="form-label">{{_('Blockchains to Farm')}} <a href="https://alltheblocks.net" target="_blank"><i class="fs-4 bi-box-arrow-up-right text-white"></i></a></label>
                     <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-apple" onclick="updateDocker()" value="apple">
+                            <label class="form-check-label" for="blockchain-apple" onclick="updateDocker()">
+                                Apple
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-ballcoin" onclick="updateDocker()" value="ballcoin">
+                            <label class="form-check-label" for="blockchain-ballcoin" onclick="updateDocker()">
+                                Ballcoin
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-bpx" onclick="updateDocker()" value="bpx">
+                            <label class="form-check-label" for="blockchain-bpx" onclick="updateDocker()">
+                                BPX
+                            </label>
+                        </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
                                 id="blockchain-btcgreen" onclick="updateDocker()" value="btcgreen">
@@ -536,11 +706,20 @@
                                 Cactus
                             </label>
                         </div>
+                    </div>
+                    <div class="row">
                         <div class="col">
                             <input class="form-check-input" type="checkbox" checked name="blockchains"
                                 id="blockchain-chia" onclick="updateDocker()" value="chia">
                             <label class="form-check-label" for="blockchain-chia" onclick="updateDocker()">
                                 Chia
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-chinilla" onclick="updateDocker()" value="chinilla">
+                            <label class="form-check-label" for="blockchain-chinilla" onclick="updateDocker()">
+                                Chinilla
                             </label>
                         </div>
                         <div class="col">
@@ -552,9 +731,25 @@
                         </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-coffee" onclick="updateDocker()" value="coffee">
+                            <label class="form-check-label" for="blockchain-coffee">
+                                Coffee
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
                                 id="blockchain-cryptodoge" onclick="updateDocker()" value="cryptodoge">
                             <label class="form-check-label" for="blockchain-cryptodoge">
                                 Cryptodoge
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-ecostake" onclick="updateDocker()" value="ecostake">
+                            <label class="form-check-label" for="blockchain-ecostake">
+                                Ecostake
                             </label>
                         </div>
                         <div class="col">
@@ -573,13 +768,41 @@
                         </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-gigahorse" onclick="updateDocker()" value="gigahorse">
+                            <label class="form-check-label" for="blockchain-gigahorse">
+                                Gigahorse
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-gold" onclick="updateDocker()" value="gold">
+                            <label class="form-check-label" for="blockchain-gold">
+                                Gold
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-greenbtc" onclick="updateDocker()" value="greenbtc">
+                            <label class="form-check-label" for="blockchain-greenbtc">
+                                GreenBTC
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
                                 id="blockchain-hddcoin" onclick="updateDocker()" value="hddcoin">
                             <label class="form-check-label" for="blockchain-hddcoin">
                                 HDDCoin
                             </label>
                         </div>
-                    </div>
-                    <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-littlelambocoin" onclick="updateDocker()" value="littlelambocoin">
+                            <label class="form-check-label" for="blockchain-littlelambocoin">
+                                LittleLamboCoin
+                            </label>
+                        </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
                                 id="blockchain-maize" onclick="updateDocker()" value="maize">
@@ -589,9 +812,25 @@
                         </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-mint" onclick="updateDocker()" value="mint">
+                            <label class="form-check-label" for="blockchain-mint">
+                                Mint
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
                                 id="blockchain-mmx" onclick="updateDocker()" value="mmx">
                             <label class="form-check-label" for="blockchain-mmx">
                                 MMX
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-moon" onclick="updateDocker()" value="moon">
+                            <label class="form-check-label" for="blockchain-moon">
+                                Moon
                             </label>
                         </div>
                         <div class="col">
@@ -603,16 +842,39 @@
                         </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
-                                id="blockchain-shibgreen" onclick="updateDocker()" value="shibgreen">
-                            <label class="form-check-label" for="blockchain-shibgreen">
-                                SHIBGreen
+                                id="blockchain-one" onclick="updateDocker()" value="one">
+                            <label class="form-check-label" for="blockchain-one">
+                                One
                             </label>
                         </div>
                         <div class="col">
                             <input class="form-check-input" type="checkbox" name="blockchains"
-                                id="blockchain-silicoin" onclick="updateDocker()" value="silicoin">
-                            <label class="form-check-label" for="blockchain-silicoin">
-                                Silicoin
+                                id="blockchain-petroleum" onclick="updateDocker()" value="petroleum">
+                            <label class="form-check-label" for="blockchain-petroleum">
+                                Petroleum
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-pipscoin" onclick="updateDocker()" value="pipscoin">
+                            <label class="form-check-label" for="blockchain-pipscoin">
+                                Pipscoin
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-profit" onclick="updateDocker()" value="profit">
+                            <label class="form-check-label" for="blockchain-profit">
+                                Profit
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-shibgreen" onclick="updateDocker()" value="shibgreen">
+                            <label class="form-check-label" for="blockchain-shibgreen">
+                                SHIBGreen
                             </label>
                         </div>
                         <div class="col">
@@ -629,6 +891,24 @@
                                 Stor
                             </label>
                         </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-tad" onclick="updateDocker()" value="tad">
+                            <label class="form-check-label" for="blockchain-tad">
+                                Tad
+                            </label>
+                        </div>
+                        <div class="col">
+                            <input class="form-check-input" type="checkbox" name="blockchains"
+                                id="blockchain-wheat" onclick="updateDocker()" value="wheat">
+                            <label class="form-check-label" for="blockchain-wheat">
+                                Wheat
+                            </label>
+                        </div>
+                        <div class="col">&nbsp;</div>
+                        <div class="col">&nbsp;</div>
                         <div class="col">&nbsp;</div>
                     </div>
                 </div>
@@ -696,6 +976,32 @@
                             class="fs-4 bi-dash text-white text-right"></i></a>
                 </div>
             </div>
+            <div class="row mb-3" id="gpus_row">
+                <div class="col offset">
+                    <h4>{{_('Graphics Devices')}} <a href="https://github.com/guydavis/machinaris/wiki/GPUs" target="_blank"><i class="fs-4 bi-question-circle text-white"></i></a></h4>
+                    <p>{{_('Optionally, if your system has an available and supported GPU, you can pass it thru to the blockchain\'s Docker container. Only Chia, Gigahorse, and MMX blockchains support certain GPUs.')}}</p>
+                    <div class="row">
+                        <div class="col">
+                            <label for="gpu_type" class="form-label">{{_('GPU Type')}}:</label>
+                            <select class="form-select" id="gpu_type" name="gpu_type" aria-label="gpu_type" onchange="updateDocker()">
+                                <option value="none" selected>{{_('None')}}</option>
+                                <option value="nvidia">{{_('Nvidia')}}</option>
+                                <option value="amd">{{_('AMD')}}</option>
+                                <option value="intel">{{_('Intel')}}</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label for="gpu_blockchain" class="form-label">{{_('Blockchain')}}:</label>
+                            <select class="form-select" id="gpu_blockchain" name="gpu_blockchain" aria-label="gpu_blockchain" onchange="updateDocker()">
+                                <option value="none" selected>{{_('None')}}</option>
+                                <option value="chia">{{_('Chia')}}</option>
+                                <option value="gigahorse">{{_('Gigahorse')}}</option>
+                                <option value="mmx">{{_('MMX')}}</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </form>
     <div class="rounded-3 small" id="docker_compose">
@@ -705,7 +1011,9 @@
         </a>
         <h2>{{_('Docker Compose')}}</h2>
         <pre id="compose"></pre>
+        <br/>
     </div>
+
     <script src="{{ url_for('static', filename='3rd_party/bootstrap.bundle.min.js') }}"></script>
     <script>
         function copyTextToClipboard(text) {

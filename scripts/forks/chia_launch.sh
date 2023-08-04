@@ -17,9 +17,6 @@ cd /chia-blockchain
 
 . ./activate
 
-mkdir -p /root/.chia/mainnet/log
-chia init >> /root/.chia/mainnet/log/init.log 2>&1
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.chia/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
@@ -37,22 +34,29 @@ if [[ "${blockchain_db_download}" == 'true' ]] \
       web:app &
   echo 'Starting web server...  Browse to port 8926.'
   echo "Downloading Chia blockchain DB (many GBs in size) on first launch..."
-  echo "Please be patient as takes minutes now, but saves days of syncing time later."
+  echo "Please be patient as this takes hours now, but saves days of syncing time later."
   mkdir -p /root/.chia/mainnet/db/chia && cd /root/.chia/mainnet/db/chia
-  # Latest Blockchain DB download from direct from https://sweetchia.com/
-  db_url=$(curl -s https://sweetchia.com | grep -Po "https:.*/blockchain_v2_mainnet-\d{4}-\d{2}-\d{2}-\d{4}.7z" | shuf -n 1)
-  echo "Please be patient! Downloading blockchain database from: "
-  echo "    ${db_url}"
-  curl -kLJ -O ${db_url}
-  p7zip --decompress --force blockchain_v2_mainnet*.7z
+  # Latest Blockchain DB, first try direct download, then fallback to slower torrent
+  torrent=$(curl -s https://www.chia.net/downloads/ | grep -Po "https:.*/blockchain_v2_mainnet.\d{4}-\d{2}-\d{2}.sqlite.gz.torrent")
+  echo "Please be patient! Downloading blockchain database indirectly (via libtorrent) from: "
+  echo "    ${torrent}"
+  curl -skLJ -O ${torrent}
+  deactivate # Use the system python
+  /usr/bin/python /machinaris/scripts/chiadb_download.py $PWD/*.torrent >> /tmp/chiadb_download.log 2>&1
+  cd /chia-blockchain && . ./activate # Re-activate
+  echo "Now decompressing the blockchain database..."
+  cd /root/.chia/mainnet/db/chia && gunzip *.gz
   cd /root/.chia/mainnet/db
-  mv /root/.chia/mainnet/db/chia/blockchain_v2_mainnet.sqlite .
+  mv /root/.chia/mainnet/db/chia/blockchain_v2_mainnet.*.sqlite blockchain_v2_mainnet.sqlite
   rm -rf /root/.chia/mainnet/db/chia
 fi
 
+mkdir -p /root/.chia/mainnet/log
+chia init >> /root/.chia/mainnet/log/init.log 2>&1
+
 echo 'Configuring Chia...'
 if [ ! -f /root/.chia/mainnet/config/config.yaml ]; then
-  sleep 10
+  sleep 60  # Give Chia long enough to initialize and create a config file...
 fi
 if [ -f /root/.chia/mainnet/config/config.yaml ]; then
   sed -i 's/log_stdout: true/log_stdout: false/g' /root/.chia/mainnet/config/config.yaml
@@ -61,13 +65,15 @@ if [ -f /root/.chia/mainnet/config/config.yaml ]; then
 fi
 
 # Loop over provided list of key paths
+label_num=0
 for k in ${keys//:/ }; do
   if [[ "${k}" == "persistent" ]]; then
     echo "Not touching key directories."
-  elif [ -f ${k} ]; then
-    echo "Adding key at path: ${k}"
-    chia keys add -f ${k} > /dev/null
-  else
+  elif [ -s ${k} ]; then
+    echo "Adding key #${label_num} at path: ${k}"
+    chia keys add -l "key_${label_num}" -f ${k} > /dev/null
+    ((label_num=label_num+1))
+  elif [[ ${mode} =~ ^fullnode.* ]]; then
     echo "Skipping 'chia keys add' as no file found at: ${k}"
   fi
 done
@@ -83,10 +89,24 @@ done
 chmod 755 -R /root/.chia/mainnet/config/ssl/ &> /dev/null
 chia init --fix-ssl-permissions > /dev/null 
 
+/usr/bin/bash /machinaris/scripts/gpu_drivers_setup.sh
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
-  chia start farmer
+if [[ ${mode} =~ ^fullnode.* ]]; then
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    chia start farmer-no-wallet
+  else
+    chia start farmer
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    chia start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   chia start farmer-only
 elif [[ ${mode} =~ ^harvester.* ]]; then
@@ -100,7 +120,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.chia/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8927/certificates/?type=chia.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8927/certificates/?type=chia.  Is the Machinaris fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -112,8 +132,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "Did not find your farmer's certificates within /root/.chia/farmer_ca."
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
-    chia configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    chia configure --enable-upnp false
+    chia configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.chia/mainnet/log/init.log
+    chia configure --enable-upnp false  2>&1 >> /root/.chia/mainnet/log/init.log
     chia start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

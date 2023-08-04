@@ -18,14 +18,14 @@ from flask.helpers import make_response
 from flask_babel import _, lazy_gettext as _l
 from subprocess import Popen, TimeoutExpired, PIPE
 
-from common.models import plottings as pl, keys as k
-from common.models.plottings import PLOTTABLE_BLOCKCHAINS
+from common.models import plottings as pl, transfers as t, keys as k
 from web import app, db, utils
-from web.models.plotman import PlottingSummary
+from web.models.plotman import PlottingSummary, ArchivingSummary
 from . import worker as w
 from . import pools as p
 
 PLOTMAN_SCRIPT = '/chia-blockchain/venv/bin/plotman'
+REPLOTTING_CONFIG = '/root/.chia/machinaris/config/replotting.json'
 
 # Don't query plotman unless at least this long since last time.
 RELOAD_MINIMUM_SECS = 30
@@ -49,9 +49,18 @@ def load_plotting_summary_by_blockchains(blockchains):
             summary[plotting.blockchain] = _('Suspended')
     if 'chia' in summary and summary['chia']:
         for blockchain in blockchains: # All forks sharing Chia plots show as "Active" too
-            if not blockchain in PLOTTABLE_BLOCKCHAINS:
+            if not blockchain in pl.PLOTTABLE_BLOCKCHAINS:
                 summary[blockchain] = summary['chia']
+    #app.logger.info(summary)
     return summary
+
+def load_archiving_summary(hostname=None):
+    query = db.session.query(t.Transfer)
+    if hostname:
+        transfers = query.filter(t.Transfer.hostname==hostname)
+    else:
+        transfers = query.all()
+    return ArchivingSummary(transfers)
 
 def load_plotters():
     return w.load_worker_summary().plotters()
@@ -62,11 +71,10 @@ def start_plotman(plotter):
         response = utils.send_post(plotter, "/actions/", {"service": "plotting","action": "start"}, debug=False)
     except:
         app.logger.info(traceback.format_exc())
-        flash('Failed to start Plotman plotting run!', 'danger')
-        flash('Please see log files.', 'warning')
+        flash(_('Failed to start Plotman plotting run! Please see log files.'), 'danger')
     else:
         if response.status_code == 200:
-            flash('Plotman started successfully.', 'success')
+            flash(_('Plotman started successfully.'), 'success')
         else:
             flash("<pre>{0}</pre>".format(response.content.decode('utf-8')), 'danger')
 
@@ -89,11 +97,10 @@ def action_plots(action, plot_ids):
             error = True
             app.logger.info(traceback.format_exc())
     if error:
-        flash('Failed to action all plots!', 'danger')
+        flash(_('Failed to %(action)s all plots!', action=action), 'danger')
         flash('<pre>{0}</pre>'.format(error_message), 'warning')
     else:
-        flash('Plotman was able to {0} the selected plots successfully.'.format(
-            action), 'success')
+        flash(_('Plotman was able to %(action)s the selected plots successfully.', action=action), 'success')
 
 def group_plots_by_worker(plot_ids):
     plots_by_worker = {}
@@ -115,11 +122,11 @@ def stop_plotman(plotter):
         response = utils.send_post(plotter, "/actions/", payload={"service": "plotting","action": "stop"}, debug=False)
     except:
         app.logger.info(traceback.format_exc())
-        flash('Failed to stop Plotman plotting run!', 'danger')
+        flash(_('Failed to stop Plotman plotting run!'), 'danger')
         flash('Please see /root/.chia/plotman/logs/plotman.log', 'warning')
     else:
         if response.status_code == 200:
-            flash('Plotman stopped successfully.  No new plots will be started, but existing ones will continue on.', 'success')
+            flash(_('Plotman stopped successfully. No new plots will be started, but existing ones will continue on.'), 'success')
         else:
             flash("<pre>{0}</pre>".format(response.content.decode('utf-8')), 'danger')
 
@@ -129,11 +136,10 @@ def start_archiving(plotter):
         response = utils.send_post(plotter, "/actions/", {"service": "archiving","action": "start"}, debug=False)
     except:
         app.logger.info(traceback.format_exc())
-        flash('Failed to start Plotman archiver!', 'danger')
-        flash('Please see log files.', 'warning')
+        flash(_('Failed to start Plotman archiver! Please see log files.'), 'danger')
     else:
         if response.status_code == 200:
-            flash('Archiver started successfully.', 'success')
+            flash(_('Archiver started successfully.'), 'success')
         else:
             flash("<pre>{0}</pre>".format(response.content.decode('utf-8')), 'danger')
 
@@ -143,11 +149,10 @@ def stop_archiving(plotter):
         response = utils.send_post(plotter, "/actions/", payload={"service": "archiving","action": "stop"}, debug=False)
     except:
         app.logger.info(traceback.format_exc())
-        flash('Failed to stop Plotman archiver', 'danger')
-        flash('Please see /root/.chia/plotman/logs/archiver.log', 'warning')
+        flash(_('Failed to stop Plotman archiver. Please see:') + ' /root/.chia/plotman/logs/archiver.log', 'danger')
     else:
         if response.status_code == 200:
-            flash('Archiver stopped successfully.', 'success')
+            flash(_('Archiver stopped successfully.'), 'success')
         else:
             flash("<pre>{0}</pre>".format(response.content.decode('utf-8')), 'danger')
 
@@ -165,13 +170,16 @@ def load_key_pk(type, blockchain):
     return None
 
 def load_pool_contract_address(blockchain):
-    plotnfts = p.load_plotnfts(blockchain)
+    pool_blockchain = blockchain
+    if blockchain == 'gigahorse':  # Use the pool settings for Chia when checking for Gigahorse
+        pool_blockchain = 'chia'
+    plotnfts = p.load_plotnfts_by_blockchain(pool_blockchain)
     if len(plotnfts.rows) == 1:
         m = re.search('Pool contract address .*: (\w+)'.format(type), plotnfts.rows[0]['details'])
         if m:
             return m.group(1)
     elif len(plotnfts.rows) > 1:
-        app.logger.info("Did not find a unique Pool contract address as multiple plotnfts exist.  Not replacing in plotman.yaml.")
+        app.logger.info("Did not find a unique Pool contract address as multiple plotnfts exist. Not replacing in plotman.yaml.")
     return None
 
 def load_config_replacements(blockchain):
@@ -212,6 +220,10 @@ def load_config(plotter, blockchain):
         #app.logger.info("Return false for replaced.")
         return [ False, '\n'.join(lines) ]
 
+def load_dirs(plotter, blockchain):
+    result = utils.send_get(plotter, "/configs/plotting_dirs/" + blockchain, debug=False).content.decode('utf-8')
+    return result
+
 def inspect_config(hostname, config):
     if 'plotting' in config:
         if 'pool_contract_address' in config['plotting']:
@@ -220,7 +232,8 @@ def inspect_config(hostname, config):
         elif 'pool_pk' in config['plotting']:
             app.logger.info("Saving config to {0}, found pool_pk {1}".format(
                 hostname, config['plotting']['pool_pk']))
-            flash('Current configuration will plot <b>SOLO</b> plots, not <b>PORTABLE</b> plots for pooling. If this is not your choice, please see the <a target="_blank" href="https://github.com/guydavis/machinaris/wiki/Pooling#setup-and-config">wiki</a>.', 'message')
+            flash(_('Current configuration will plot %(open_b)sSOLO%(close_b)s plots, not %(open_b)sPORTABLE%(close_b)s plots for pooling. If this is not your choice, please see the %(wiki_open)swiki%(wiki_close)s.', 
+                open_b='<b>', close_b='</b>', wiki_open='<a target="_blank" href="https://github.com/guydavis/machinaris/wiki/Pooling#setup-and-config">', wiki_close='</a>'), 'message')
     else:
          app.logger.info("Saving config to {0}, found a malformed config without a 'plotting' section.")
 
@@ -230,16 +243,16 @@ def save_config(plotter, blockchain, config):
         inspect_config(plotter.hostname, c)
     except Exception as ex:
         app.logger.info(traceback.format_exc())
-        flash('Updated plotman.yaml failed validation! Fix and save or refresh page.', 'danger')
+        flash(_('Updated plotman.yaml failed validation! Fix and save or refresh page.'), 'danger')
         flash(str(ex), 'warning')
     try:
         response = utils.send_put(plotter, "/configs/plotting/" + blockchain, config, debug=False)
     except Exception as ex:
-        flash('Failed to save config to plotter.  Please check log files.', 'danger')
+        flash(_('Failed to save config to plotter. Please check log files.'), 'danger')
         flash(str(ex), 'warning')
     else:
         if response.status_code == 200:
-            flash('Nice! Plotman\'s plotman.yaml validated and saved successfully.', 'success')
+            flash(_('Nice! Plotman\'s plotman.yaml validated and saved successfully.'), 'success')
         else:
             flash("<pre>{0}</pre>".format(response.content.decode('utf-8')), 'danger')
 
@@ -249,7 +262,7 @@ def analyze(plot_id):
     if os.path.exists(analyze_file):
         with open(analyze_file, 'r+') as fp:
             return fp.read()
-    return make_response("Sorry, no plotting job log found.  Perhaps plot was made outside Machinaris?", 200)
+    return make_response(_("Sorry, no plotting job log found. Perhaps plot was made outside Machinaris?"), 200)
 
 def load_plotting_keys(blockchain):
     farmer_pk = load_key_pk('Farmer', blockchain)
@@ -262,3 +275,56 @@ def load_plotting_keys(blockchain):
     if not pool_contract_address:
         pool_contract_address = None if os.environ['pool_contract_address'] == 'null' else os.environ['pool_contract_address']
     return [farmer_pk, pool_pk, pool_contract_address]
+
+def load_replotting_settings():
+    settings = {}
+    if os.path.exists(REPLOTTING_CONFIG):
+        with open(REPLOTTING_CONFIG, 'r') as fp:
+            settings = json.loads(fp.read())
+    for blockchain in pl.PLOTTABLE_BLOCKCHAINS:
+        if not blockchain in settings:  # Default is to have replotting disabled.
+            settings[blockchain] = { "enabled": False, "delete_solo": False, "delete_uncompressed": False, "free_ksize": 32, }
+    return settings
+
+def save_replotting_settings(form):
+    settings = load_replotting_settings()
+    app.logger.info(form)
+    replotting_enabled = []
+    for blockchain in pl.PLOTTABLE_BLOCKCHAINS:
+        settings[blockchain]['enabled'] = form.get('replotting_{0}'.format(blockchain)) == 'true'
+        if settings[blockchain]['enabled']:
+            replotting_enabled.append(blockchain.capitalize())
+        settings[blockchain]['free_ksize'] = int(form.get('replotting_{0}_free_ksize'.format(blockchain)))
+        settings[blockchain]['delete_solo'] = form.get('replotting_{0}_delete_solo'.format(blockchain)) == 'true'
+        settings[blockchain]['delete_uncompressed'] = form.get('replotting_{0}_delete_uncompressed'.format(blockchain)) == 'true'
+        settings[blockchain]['delete_before'] = form.get('replotting_{0}_delete_before'.format(blockchain)) == 'true'
+        settings[blockchain]['delete_before_date'] = form.get('replotting_{0}_delete_before_date'.format(blockchain))
+        settings[blockchain]['delete_by_ksize'] = form.get('replotting_{0}_delete_by_ksize'.format(blockchain)) == 'true'
+        settings[blockchain]['delete_by_ksizes'] = list(map(int, form.getlist('replotting_{0}_delete_by_ksizes'.format(blockchain))))
+    try:
+        with open(REPLOTTING_CONFIG, 'w') as f:
+            json.dump(settings, f)
+        if replotting_enabled:
+            flash(_('Replotting has been enabled for %(blockchains)s. Please start Plotting (and Archiving) once free space for replotting appears in about 15 minutes.', blockchains=', '.join(replotting_enabled)), 'success')
+        else:
+            flash(_('Replotting has been DISABLED for all blockchains.  Machinaris will NOT remove any plots now.'), 'success')
+    except Exception as ex:
+        msg = _("Unable to save replotting settings in %(file)s because %(exception)s", file=REPLOTTING_CONFIG, exception=str(ex))
+        app.logger.error(msg)
+        flash(msg, 'danger')
+        return
+    return settings
+
+
+def load_schedule(plotter, blockchain):
+    result = utils.send_get(plotter, "/configs/plotting_schedule/" + blockchain, debug=False).content.decode('utf-8')
+    return json.loads(result)
+
+# Method is invoked by a XHR post from the Settings | Plotting page.  Don't use flash()
+def save_schedules(worker, blockchain, schedule):
+    try:
+        response = utils.send_put(worker, "/configs/plotting_schedule/" + blockchain, schedule, debug=False)
+    except Exception as ex:
+        app.logger.error('Failed to save schedule to plotter because {0}'.format(str(ex)))
+    else:
+        app.logger.info('Plotting schedule has been saved and applied.  Current plotting manager status of running or stopped is not immediately affected.')

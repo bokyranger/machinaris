@@ -12,17 +12,17 @@ mkdir -p /root/.chia/sit
 rm -f /root/.sit
 ln -s /root/.chia/sit /root/.sit 
 
-mkdir -p /root/.sit/mainnet/log
-sit init >> /root/.sit/mainnet/log/init.log 2>&1 
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.sit/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
   && [[ ! -f /root/.sit/mainnet/db/blockchain_v2_mainnet.sqlite ]]; then
   mkdir -p /root/.sit/mainnet/db/ && cd /root/.sit/mainnet/db/
-  echo "Sorry, Silicoin does not offer a recent blockchain DB for download via script.  Standard sync will happen over a few days..."
-  echo "It is recommended to add some peer node connections on the Connections page of Machinaris from: https://alltheblocks.net/sit"
+  echo "Sorry, Silicoin does not offer a recent blockchain DB for download via script.  Standard sync will happen over a few weeks."
+  echo "It is recommended to add some peer node connections on the Connections page of Machinaris."
 fi
+
+mkdir -p /root/.sit/mainnet/log
+sit init >> /root/.sit/mainnet/log/init.log 2>&1 
 
 echo 'Configuring Silicoin...'
 if [ -f /root/.sit/mainnet/config/config.yaml ]; then
@@ -71,7 +71,7 @@ chmod 755 -R /root/.sit/mainnet/config/ssl/ &> /dev/null
 sit init --fix-ssl-permissions > /dev/null 
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -82,12 +82,25 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  sit start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    sit start farmer-no-wallet
+  else
+    sit start farmer
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.sit/mainnet/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
   else
     sit start farmer-only
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    sit start timelord-only
   fi
 elif [[ ${mode} =~ ^harvester.* ]]; then
   if [[ -z ${farmer_address} || -z ${farmer_port} ]]; then
@@ -100,7 +113,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.sit/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8941/certificates/?type=silicoin.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8941/certificates/?type=silicoin.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -113,8 +126,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
     echo "Configuring farmer peer at ${farmer_address}:${farmer_port}"
-    sit configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    sit configure --enable-upnp false
+    sit configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.sit/mainnet/log/init.log
+    sit configure --enable-upnp false  2>&1 >> /root/.sit/mainnet/log/init.log
     sit start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

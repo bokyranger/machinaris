@@ -12,9 +12,6 @@ mkdir -p /root/.chia/flax
 rm -f /root/.flax
 ln -s /root/.chia/flax /root/.flax 
 
-mkdir -p /root/.flax/mainnet/log
-flax init >> /root/.flax/mainnet/log/init.log 2>&1 
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.flax/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
@@ -22,9 +19,12 @@ if [[ "${blockchain_db_download}" == 'true' ]] \
   echo "Downloading Flax blockchain DB (many GBs in size) on first launch..."
   echo "Please be patient as takes minutes now, but saves days of syncing time later."
   mkdir -p /root/.flax/mainnet/db/ && cd /root/.flax/mainnet/db/
-  # Latest Blockchain DB download as per the Flax Discord FAQ - 2022-04-06 No v2 download yet...
-  curl -skLJO https://flax.musmo.com/db/blockchain_v1_mainnet.sqlite
+  # Latest Blockchain DB download as per the Flax Discord FAQ
+  curl -skLJO https://flax.musmo.com/db/blockchain_v2_mainnet.sqlite
 fi
+
+mkdir -p /root/.flax/mainnet/log
+flax init >> /root/.flax/mainnet/log/init.log 2>&1 
 
 echo 'Configuring Flax...'
 if [ -f /root/.flax/mainnet/config/config.yaml ]; then
@@ -34,12 +34,14 @@ if [ -f /root/.flax/mainnet/config/config.yaml ]; then
 fi
 
 # Loop over provided list of key paths
+label_num=0
 for k in ${keys//:/ }; do
   if [[ "${k}" == "persistent" ]]; then
     echo "Not touching key directories."
   elif [ -s ${k} ]; then
-    echo "Adding key at path: ${k}"
-    flax keys add -f ${k} > /dev/null
+    echo "Adding key #${label_num} at path: ${k}"
+    flax keys add -l "key_${label_num}" -f ${k} > /dev/null
+    ((label_num=label_num+1))
   fi
 done
 
@@ -55,7 +57,7 @@ chmod 755 -R /root/.flax/mainnet/config/ssl/ &> /dev/null
 flax init --fix-ssl-permissions > /dev/null 
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -66,7 +68,20 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  flax start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    flax start farmer-no-wallet
+  else
+    flax start farmer
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    flax start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.flax/mainnet/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
@@ -84,7 +99,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.flax/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8928/certificates/?type=flax.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8928/certificates/?type=flax.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -96,8 +111,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "Did not find your farmer's certificates within /root/.flax/farmer_ca."
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
-    flax configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    flax configure --enable-upnp false
+    flax configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.flax/mainnet/log/init.log
+    flax configure --enable-upnp false  2>&1 >> /root/.flax/mainnet/log/init.log
     flax start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

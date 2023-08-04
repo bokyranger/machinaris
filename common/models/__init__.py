@@ -12,6 +12,8 @@ from .plottings import Plotting
 from .pools import Pool
 from .stats import StatPlotCount, StatPlotsSize, StatTotalCoins, StatNetspaceSize, StatTimeToWin, \
         StatPlotsTotalUsed, StatPlotsDiskUsed, StatPlotsDiskFree, StatPlottingTotalUsed, \
-        StatPlottingDiskUsed, StatPlottingDiskFree
+        StatPlottingDiskUsed, StatPlottingDiskFree, StatFarmedBlocks, StatWalletBalances, StatEffort
+from .transfers import Transfer
 from .wallets import Wallet
+from .warnings import Warning
 from .workers import Worker 

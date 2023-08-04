@@ -2,8 +2,78 @@
 
 {% block content %}
 
+<div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    {% if category == 'message' %}
+    <div class="alert alert-warning" role="alert">
+      {% else %}
+      <div class="alert alert-{{ category }}" role="alert">
+        {% endif %}
+        {{ message|safe }}
+      </div>
+      {% endfor %}
+      {% endif %}
+      {% endwith %}
+    </div>
+
+<div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+    <div class="modal-dialog bg-dark rounded-3 modal-sm">
+      <div class="modal-content bg-dark">
+        <div class="modal-header bg-dark">
+          <h5 class="modal-title" id="settingsModalLabel">{{_('Settings')}}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body bg-dark">
+          <form method="POST" id="settings-form">
+            <div class="mb-3">
+              <label for="local_currency" class="col-form-label">{{_('Local Currency:')}}</label>
+              <select type="text" class="form-control" id="local_currency_field" name="local_currency">
+                {% for rate in exchange_rates %}
+                  {% if exchange_rates[rate]['type'] == 'fiat' %}
+                    <option {% if local_currency == rate %} selected {% endif %}
+                        value="{{rate}}">{{exchange_rates[rate]['name']}} ({{exchange_rates[rate]['unit']}})</option>
+                    {% endif %}
+                {% endfor %}
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btnCancel" data-bs-dismiss="modal">{{_('Cancel')}}</button>
+          <button type="button" class="btn btn-outline-success" id="btnSave">{{_('Save')}}</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="restartModal" tabindex="-1" aria-labelledby="restartModalLabel" aria-hidden="true">
+    <div class="modal-dialog bg-dark rounded-3 modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header bg-dark">
+                <h5 class="modal-title" id="restartModalLabel">{{_('Restart Blockchain')}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form method="POST" id="restart-form">
+                <input type="hidden" id="hostname_field" name="hostname" value="" />
+                <input type="hidden" id="blockchain_field" name="blockchain" value="" />
+                <p>{{_('This will restart ALL the fullnode services for this blockchain, including the farming, harvesting, and wallet (if running).  Please allow at least 15 minutes after a restart for all blockchain services to reconnect before attempting another restart.  Your patience is appreciated! Continue with Restart?')}}</p>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" id="btnCancel" data-bs-dismiss="modal">{{_('Cancel')}}</button>
+              <button type="button" class="btn btn-outline-success" id="btnRestart">{{_('Restart')}}</button>
+            </div>
+        </div>
+    </div>
+  </div>
+
 <div class="position-relative">
     <div class="position-absolute top-0 end-0" style="z-index: 2000; margin-top: -18px; margin-right: -8px;">
+      <a href="#" title="{{_('Settings')}}" data-bs-toggle="modal" data-bs-target="#settingsModal" target="_blank"><i class="fs-4 bi-gear"></i></a>
+        &nbsp;
       <a href="https://github.com/guydavis/machinaris/wiki/Blockchains" target="_blank">
         <i class="fs-4 bi-question-circle"></i>
       </a>
@@ -16,6 +86,10 @@
     }
     button.active.nav-link {
         background-color: #3d3f42 !important
+    }
+    td.icon_cell {
+        text-align: center;
+        padding:0px 5px 0px 0px;
     }
 </style>
 
@@ -30,31 +104,65 @@
             <tr>
                 <th scope="col" class="text-success">{{_('Blockchain')}}</th>
                 <th scope="col" class="text-success">{{_('Status')}}</th>
+                <th scope="col" class="text-success">{{_('Price')}} {{local_cur_sym|upper}}</th>
                 <th scope="col" class="text-success">{{_('Peak Height')}}</th>
                 <th scope="col" class="text-success">{{_('Peak Time')}}</th>
                 <th scope="col" class="text-success">{{_('Updated At')}}</th>
-                <th scope="col" class="text-success">{{_('Logs')}}</th>
+                <th scope="col" class="text-success"></th>
+                <th scope="col" class="text-success"></th>
             </tr>
         </thead>
         <tbody>
             {% for blockchain in blockchains.rows %}
             <tr>
-                <td><a class="text-white" href="{{ url_for('worker_route') }}?hostname={{ fullnodes[blockchain.blockchain].hostname }}&blockchain={{ blockchain.blockchain }}">{{blockchain.blockchain}}</a></td>
+                <td>
+                  {% if blockchain.blockchain in fullnodes %}
+                  <a class="text-white" href="{{ url_for('worker_route') }}?hostname={{ fullnodes[blockchain.blockchain].hostname }}&blockchain={{ blockchain.blockchain }}">{{blockchain.blockchain}}</a>
+                  {% else %}
+                  {{blockchain.blockchain}}
+                  {% endif %}
+                </td>
                 <td>
                     {% if blockchain.status == 'Offline' %}
-                      <i class="bi-dash-circle text-danger"></i>
+                      <i class="bi-dash-circle text-danger"></i> &nbsp; {{_('Offline')}}
                     {% elif blockchain.status.lower().startswith('synced') %}
-                        <i class="bi-check-circle text-success"></i>
+                      <i class="bi-check-circle text-success"></i>
+                      &nbsp; <a class="text-white" title="{{_('Restart Blockchain')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{ fullnodes[blockchain.blockchain].hostname }}" data-bs-blockchain="{{blockchain.blockchain}}">{{_('Synced')}}</a>
+                    {% elif blockchain.status.lower().startswith('not synced') %}
+                      <i class="bi-exclamation-triangle text-warning"></i>
+                      &nbsp; <a class="text-white" title="{{_('Restart Blockchain')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{ fullnodes[blockchain.blockchain].hostname }}" data-bs-blockchain="{{blockchain.blockchain}}">{{_('Not Synced')}}</a>
+                    {% elif blockchain.status.lower().startswith('syncing')  %}
+                      <i class="bi-exclamation-triangle text-warning"></i>
+                      &nbsp; <a class="text-white" title="{{_('Restart Blockchain')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{ fullnodes[blockchain.blockchain].hostname }}" data-bs-blockchain="{{blockchain.blockchain}}">{{_('Syncing')}}</a>
+                    {% elif blockchain.status.lower().startswith('error') %}
+                      <i class="bi-exclamation-triangle text-danger"></i>
+                      &nbsp; <a class="text-white" title="{{_('Restart Blockchain')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{ fullnodes[blockchain.blockchain].hostname }}" data-bs-blockchain="{{blockchain.blockchain}}">{{_('Error')}}</a>
                     {% else %}
                       <i class="bi-exclamation-triangle text-warning"></i>
-                    {% endif %} &nbsp;
-                    {{blockchain.status}}
+                      &nbsp; <a class="text-white" title="{{_('Restart Blockchain')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{ fullnodes[blockchain.blockchain].hostname }}" data-bs-blockchain="{{blockchain.blockchain}}">{{blockchain.status}}</a>
+                    {% endif %} 
                 </td>
+                <td><a data-toggle="tooltip" data-bs-placement="right" data-bs-html="true" 
+                  title="{{blockchain.fiat_price_tooltip}}">{{blockchain.fiat_price}}</a></td>
                 <td>{{blockchain.peak_height}}</td>
                 <td>{{blockchain.peak_time}}</td>
                 <td>{{blockchain.updated_at | datetimefilter}}</td>
-                <td style="padding:0px">
-                    <a href="#" title="View Blockchain Log" onclick='ViewLogs("{{ fullnodes[blockchain.blockchain].hostname }}","{{ blockchain.blockchain }}");return false;'><i class="fs-4 bi-text-indent-left"></i></a>
+                <td class='icon_cell'>{% 
+                    if blockchain.blockchain == 'mmx' 
+                    %}<a href="https://github.com/madMAx43v3r/mmx-node#mmx-node" target="_blank" title="{{_('View Blockchain Details')}}" ><i class="fs-4 bi-box-arrow-up-right"></i></a>{% 
+                     else 
+                    %}<a href="{{ blockchain.blockchain|alltheblocks_blockchainlink }}" target="_blank" 
+                        title="{{_('AllTheBlocks Status')}}" ><i class="fs-4 bi-globe {% 
+                          if blockchain.atb_sync_status == 'IN SYNC' %}
+                          text-success
+                        {% elif blockchain.atb_sync_status == 'NO SYNC' %}
+                          text-warning
+                        {% endif %}"></i></a>{% 
+                    endif 
+                    %}</td>
+                <td class='icon_cell'>
+                    <a href="#" title="{{_('View Blockchain Log')}}" onclick='ViewLogs("{{ blockchain.hostname }}","{{ blockchain.blockchain }}");return false;'>
+                        <i class="fs-4 bi-file-text"></i></a>
                 </td>
             </tr>
             {% endfor %}
@@ -106,11 +214,28 @@ function ViewLogs(hostname, blockchain) {
     window.open("{{ url_for('logs') }}?log=farming" + "&hostname=" + hostname + "&blockchain=" + blockchain, '{{_('Fullnode Log for ')}}' + blockchain + ' - ' + hostname, 'resizeable=yes,scrollbars=yes,height=' + height + ',width=' + width + ',top=' + top + ',left=' + left).focus();
 }
 $(document).ready(function () {
+    $("#btnSave").click(function () {
+        $("#btnCancel").prop("disabled", true);
+        $(this).prop("disabled", true);
+        $(this).html(
+            `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving...`
+        );
+        $("#settings-form").submit();
+    });
+    $("#btnRestart").click(function () {
+        $("#btnCancel").prop("disabled", true);
+        $(this).prop("disabled", true);
+        $(this).html(
+            `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Restarting...`
+        );
+        $("#restart-form").submit();
+    });
     $('#data').DataTable({
+        "stateSave": true,
         "pageLength": 25,
         "columnDefs": [
             {
-                targets: [5], "orderable": false,
+                targets: [6,7], "orderable": false,
             }
         ],
         {% if lang != 'en' %}
@@ -119,6 +244,19 @@ $(document).ready(function () {
         },
         {% endif %}
     });
+    $('[data-toggle="tooltip"]').tooltip();
+    var restartModal = document.getElementById('restartModal')
+    restartModal.addEventListener('show.bs.modal', function (event) {
+        var button = event.relatedTarget
+        var hostname = button.getAttribute('data-bs-hostname')
+        var hostnameField = document.getElementById('hostname_field')
+        hostnameField.value = hostname
+        var blockchain = button.getAttribute('data-bs-blockchain')
+        var blockchainField = document.getElementById('blockchain_field')
+        blockchainField.value = blockchain
+        var modalTitle = restartModal.querySelector('.modal-title')
+        modalTitle.textContent = 'Restart Blockchain - ' + blockchain
+    })
 })
 </script>
 {% endblock %}

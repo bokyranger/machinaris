@@ -5,13 +5,21 @@ A Docker image for plotting and farming the Chia™ cryptocurrency on [one compu
 
 ![Home](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/machinaris_home.png)
 
-For details, see your particular platform: [Windows](https://github.com/guydavis/machinaris/wiki/Windows), [Linux](https://github.com/guydavis/machinaris/wiki/Linux), [Macintosh](https://github.com/guydavis/machinaris/wiki/MacOS), [Unraid](https://github.com/guydavis/machinaris/wiki/Unraid), [TrueNAS](https://github.com/guydavis/machinaris/wiki/TrueNAS), [Synology](https://github.com/guydavis/machinaris/wiki/Synology) and [others](https://github.com/guydavis/machinaris/wiki/Docker).  *For support, start a [Discussion](https://github.com/guydavis/machinaris/discussions) or join our [Discord](https://discord.gg/mX4AtMTt87)*.
+For details, see your particular platform: [Windows](https://github.com/guydavis/machinaris/wiki/Windows), [Linux](https://github.com/guydavis/machinaris/wiki/Linux), [Macintosh](https://github.com/guydavis/machinaris/wiki/MacOS), [Unraid](https://github.com/guydavis/machinaris/wiki/Unraid), [Synology](https://github.com/guydavis/machinaris/wiki/Synology) and [others](https://github.com/guydavis/machinaris/wiki/Docker).  *For support, start a [Discussion](https://github.com/guydavis/machinaris/discussions) or join our [Discord](https://discord.gg/mX4AtMTt87)*.
 
 ## Plotting View
 
-Plotting with the [MadMax](https://github.com/madMAx43v3r/chia-plotter), [Bladebit](https://github.com/harold-b/bladebit), and [Chia™](https://github.com/Chia-Network/chia-blockchain) plotters is managed by [Plotman](https://github.com/ericaltendorf/plotman) through the Machinaris WebUI.
+Plotting with the [MadMax](https://github.com/guydavis/machinaris/wiki/Madmax)/[Gigahorse](https://github.com/guydavis/machinaris/wiki/Gigahorse) and [Bladebit](https://github.com/guydavis/machinaris/wiki/Bladebit) plotters, with optional GPU, is managed by [Plotman](https://github.com/guydavis/machinaris/wiki/Plotman) through the Machinaris WebUI across many machines:
 
 ![Plotting](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/machinaris_plotting.png)
+
+Track your plotter machines performance as you fine-tune your plotting, graphed for each k-size you plot.
+
+![Speed](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/plotting_speed_chart.png)
+
+Archive your new plots to their final destination on local drives or on remote harvesters (via rsync):
+
+![Transfers](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/archiving_transfers.png)
 
 ## Farming View
 
@@ -19,13 +27,17 @@ Machinaris bundles the [latest Chia™ version](https://github.com/Chia-Network/
 
 ![Farming](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/machinaris_farming.png)
 
-Machinaris also optionally farms your plots to many other blockchain forks including [Cactus](https://github.com/guydavis/machinaris/wiki/Cactus), [Cryptodoge](https://github.com/guydavis/machinaris/wiki/Cryptodoge), [Chives](https://github.com/guydavis/machinaris/wiki/Chives), [Flax](https://github.com/guydavis/machinaris/wiki/Flax), [Flora](https://github.com/guydavis/machinaris/wiki/Flora), [HDDCoin](https://github.com/guydavis/machinaris/wiki/HDDCoin), [Maize](https://github.com/guydavis/machinaris/wiki/Maize), [NChain](https://github.com/guydavis/machinaris/wiki/Nchain), [Staicoin](https://github.com/guydavis/machinaris/wiki/Staicoin), and [Stor](https://github.com/guydavis/machinaris/wiki/Stor).
+Machinaris also optionally farms your plots to other blockchains including [BPX](https://github.com/guydavis/machinaris/wiki/BPX), [Chives](https://github.com/guydavis/machinaris/wiki/Chives), [Ecostake](https://github.com/guydavis/machinaris/wiki/Ecostake), [Flax](https://github.com/guydavis/machinaris/wiki/Flax), [HDDCoin](https://github.com/guydavis/machinaris/wiki/HDDCoin), [MMX](https://github.com/guydavis/machinaris/wiki/MMX), and [many others](https://github.com/guydavis/machinaris/wiki/Forks).
 
 ## Alerts
 
-[Chiadog](https://github.com/martomi/chiadog) provides monitoring of the log files, ensuring you get notified when important events occur across your farm:
+[Chiadog](https://github.com/guydavis/machinaris/wiki/ChiaDog) provides monitoring of the log files, ensuring you get notified when important events occur across your farm:
 
 ![Alerts](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/ChiaDog-1-Example.png)
+
+[Drive health](https://github.com/guydavis/machinaris/wiki/Drives) is monitored as with `smartctl` on Linux. Notifications can be sent to e-mail, telegram, discord, slack, etc.
+
+![Drives](https://raw.githubusercontent.com/guydavis/machinaris-unraid/master/docs/img/drives_grid.png)
 
 ## Setup
 
@@ -35,7 +47,7 @@ Simplified setup allows you to either import your existing key mnemonic or gener
 
 That's for fullnode (default) and farmer modes. However, for [harvester](https://github.com/guydavis/machinaris/wiki/Docker#harvester-only) you only need the farmer's CA certificates and for [plotter](https://github.com/guydavis/machinaris/wiki/Docker#plotter-only) only your pool and farmer public keys.
 
-Immediately on setup, a [fast blockchain download](https://github.com/guydavis/machinaris/wiki/Keys#blockchain-initialization) will get you synced and farming in just minutes, rather than the days required by other blockchain clients.
+Immediately on setup, a [fast blockchain download](https://github.com/guydavis/machinaris/wiki/Keys#blockchain-initialization) will get you synced and farming in just hours, rather than the days required by the official GUI client.
 
 ## Configuration
 

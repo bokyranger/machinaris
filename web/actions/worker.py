@@ -4,6 +4,7 @@
 
 import asyncio
 import datetime
+import json
 import os
 import psutil
 import re
@@ -57,18 +58,18 @@ def get_worker(hostname, blockchain='chia'):
 
 def get_fullnode(blockchain='chia'):
     #app.logger.info("Searching for fullnode with blockchain: {0}".format(blockchain))
-    return db.session.query(workers.Worker).filter(workers.Worker.mode=='fullnode', workers.Worker.blockchain==blockchain).first()
+    return db.session.query(workers.Worker).filter(workers.Worker.mode.like('%fullnode%'), workers.Worker.blockchain==blockchain).first()
 
 def get_fullnodes_by_blockchain():
     fullnodes = {}
-    for worker in db.session.query(workers.Worker).filter(workers.Worker.mode=='fullnode').all():
+    for worker in db.session.query(workers.Worker).filter(workers.Worker.mode.like('%fullnode%')).all():
         fullnodes[worker.blockchain] = worker
         app.logger.debug("{0} -> {1}".format(worker.blockchain, worker.hostname))
     return fullnodes
 
 def default_blockchain():
     first_blockchain = None
-    for worker in db.session.query(workers.Worker).filter(workers.Worker.mode=='fullnode').order_by(workers.Worker.blockchain).all():
+    for worker in db.session.query(workers.Worker).filter(workers.Worker.mode.like('%fullnode%')).order_by(workers.Worker.blockchain).all():
         if not first_blockchain:
             first_blockchain = worker.blockchain
         if worker.blockchain == 'chia':  # Default choice
@@ -76,6 +77,18 @@ def default_blockchain():
         if worker.blockchain == 'chives':  # Second choice
             return worker.blockchain
     return first_blockchain # Last choice, just use whatever is first alphabetically
+
+def mmx_block_reward():
+    try:
+        mmx_worker = db.session.query(workers.Worker).filter(workers.Worker.mode.like('%fullnode%'), workers.Worker.blockchain=='mmx').first()
+        if mmx_worker:
+            mmx_config = json.loads(mmx_worker.config)
+            if 'mmx_reward' in mmx_config:
+                #app.logger.info(mmx_config['mmx_reward'])
+                return float(mmx_config['mmx_reward'])
+    except Exception as ex:
+        app.logger.error("Failed to get MMX block reward from worker config because: {0}".format(str(ex)))
+    return None
 
 def prune_workers_status(workers):
     for id in workers:
@@ -89,6 +102,7 @@ def prune_workers_status(workers):
                 db.session.commit()
         else:
             app.logger.info("Unable to find worker: {0} - {1}".format(hostname, blockchain))
+    flash(_("Relax and grab a coffee. Status is being gathered from active workers.  Please allow 15 minutes..."), 'info')
 
 # Often users set different timezones for workers, leading to hours of local time difference
 def check_worker_time_near_to_controller(worker):
@@ -116,6 +130,18 @@ def generate_warnings(worker):
             worker.hostname, worker.port, worker.blockchain, worker_version, controller_version))
         warnings.append(WorkerWarning(_("Machinaris version does not match controller."),  
             _("Please use a consistent Machinaris version to avoid issues."), 'warning'))
+    if worker.fullnode_db_version() == "v1":  # None for non-fullnode, else 'v2' for already updated.
+        # Don't warn if the blockchain is really old and supports only v1, so can't upgrade
+        if not globals.legacy_blockchain(worker.blockchain):
+            wiki_link = "https://github.com/guydavis/machinaris/wiki/Forks#database-upgrade"
+            if worker.blockchain == "chia":
+                wiki_link = "https://github.com/guydavis/machinaris/wiki/Chia#database-upgrade"
+            warnings.append(WorkerWarning( \
+                _("This fullnode is running old v1 format database."),  
+                _("Please %(wiki_link)supgrade%(close_link)s to newer v2 format for less disk usage.",
+                    wiki_link="<a class='text-white' target='_blank' href='{0}'>".format(wiki_link), 
+                    close_link='</a>'), 
+                'warning'))
 
     # TODO - Warning for fullnode without a working key
     # TODO - Warning for farmer too slow on pool partials: "Error in pooling: (2, 'The partial is too late."

@@ -48,7 +48,7 @@
 
                         {% if blockchain_download_size %}
                         <br />
-                        <p style="text-center"><b>Blockchain Download Status: {{ blockchain_download_size }} so far...</b></p>
+                        <p style="text-center"><b>{{_('Downloaded and unzipped %(size)s so far...', size=blockchain_download_size)}}</b></p>
                         <br />
                         <div class="progress">
                             <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
@@ -58,10 +58,11 @@
                         <br />
                         <br />
 
+                        {% autoescape false %}
                         <p>{{_(
-                            'On very first launch, the Chia compressed blockchain database %(compressed)s is being downloaded from %(dl_link)s. At about %(uncompressed)s in uncompressed size (progress shown above), this will take a while. However minutes of download now, will save you multiple days of blockchain syncing later. Please be patient!', 
-                            compressed="(~26 GB)", uncompressed="65 GB",
-                            dl_link='<a target="_blank" href="https://sweetchia.com">https://sweetchia.com</a>'
+                            'On very first launch, the Chia compressed blockchain database %(compressed)s is being downloaded from %(dl_link)s, then unzipped. At about %(uncompressed)s in uncompressed size, this will take a while. However an hour or two now, will save you multiple days of blockchain syncing later. Please be patient!', 
+                            compressed="(~56 GB)", uncompressed="106 GB",
+                            dl_link='<a target="_blank" href="https://www.chia.net/downloads/">https://www.chia.net/downloads/</a>'
                         )}}</p>
                         <br />
                         <br />
@@ -71,19 +72,19 @@
                         <br />
                         <br />
                         <br />
-
                         <p class="small">{{_(
                                 'NOTE: If you would prefer to allow Chia to sync the blockchain over many days, see the %(init_link)s for details. Similarly, you may instead %(import_link_open)s import your own blockchain %(import_link_close)s if you have one from a previous Chia install.',
                                 init_link='<a href="https://github.com/guydavis/machinaris/wiki/Keys#blockchain-initialization" target="_blank">Wiki</a>',
                                 import_link_open='<a href="https://github.com/guydavis/machinaris/wiki/Keys#blockchain-import" target="_blank">', import_link_close='</a>'
                         )}}</p>
+                        {% endautoescape %}
 
                         {% else %}
 
                         <p>{{_('To get started with Machinaris as a Chia%(trademark)s fullnode, either import your existing 24-word mnemonic seed phrase', trademark='™')}}: </p>
-                        <!-- Sample mnemonic to hint with, key long since thrown-away -->
+                        <!-- "placeholder" is an example mnemonic to hint required format with, key long since thrown-away -->
                         <form id="main-form" method="POST">
-                            <input class="form-control me-2" id="mnemonic" name="mnemonic" type="text"
+                            <input class="form-control me-2" id="mnemonic" name="mnemonic" type="text" autocomplete="off"
                                 placeholder="north divorce holiday whisper inquiry toy rare minute father ostrich surprise runway ill episode dance rather unaware concert sunset maid gather grain gift wire"
                                 aria-label="Import Key">
                             <br />
@@ -107,7 +108,7 @@
 
                         {% autoescape false %}
                         <p class="small">
-                            {{_('NOTE: If you would prefer to instead import your mnenmoic seed phrase yourself at the command-line, see the %(wiki_link)s for details.', 
+                            {{_('NOTE: If you would prefer to instead import your mnemonic seed phrase yourself at the command-line, see the %(wiki_link)s for details.', 
                             wiki_link='<a href="https://github.com/guydavis/machinaris/wiki/Keys" target="_blank">Wiki</a>')}}
                         </p>
                         {% endautoescape %}
@@ -123,7 +124,7 @@
     <script>
         $(document).ready(function () {
             $("#btnImport").click(function () {
-                var mnemonic = $('#mnemonic').val().trim();
+                var mnemonic = $('#mnemonic').val().trim().toLowerCase();
                 if (!mnemonic) {
                     alert("Please provide a non-empty mnemonic seed phrase to import.");
                     return;

@@ -11,14 +11,14 @@ from sqlalchemy import event
 
 from web.default_settings import DefaultConfig
 
+from common.config import globals
+
 app = Flask(__name__)
 app.secret_key = b'$}#P)eu0A.O,s0Mz'
 app.config.from_object(DefaultConfig)
 # Override config with optional settings file
 app.config.from_envvar('WEB_SETTINGS_FILE', silent=True)
-babel = Babel(app)
 
-@babel.localeselector
 def get_locale():
     try:
         accept = request.headers['Accept-Language']
@@ -33,6 +33,8 @@ def get_locale():
     except:
         app.logger.debug("INIT: Request had no Accept-Language, returning default locale of en.")
     return request.accept_languages.best_match(app.config['LANGUAGES'])
+
+babel = Babel(app, locale_selector=get_locale,)
 
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -82,13 +84,7 @@ def timesecondstrimmer(value):
 app.jinja_env.filters['timesecondstrimmer'] = timesecondstrimmer
 
 def plotnameshortener(value):
-    #app.logger.info("Shorten: {0}".format(value))
-    match = re.match("plot(?:-mmx)?-k(\d+)-(\d+)-(\d+)-(\d+)-(\d+)-(\d+)-(\w+).plot", value)
-    if match:
-        return "plot-k{0}-{1}-{2}-{3}-{4}-{5}-{6}...".format( match.group(1), 
-            match.group(2), match.group(3), match.group(4), match.group(5), match.group(6),
-            match.group(7)[:16])
-    return value
+    return value[:30]
 
 app.jinja_env.filters['plotnameshortener'] = plotnameshortener
 
@@ -97,3 +93,22 @@ def launcheridshortener(value):
     return value[:12] + '...'
 
 app.jinja_env.filters['launcheridshortener'] = launcheridshortener
+
+def alltheblocks_blockchainlink(blockchain):
+   alltheblocks_blockchain = globals.get_alltheblocks_name(blockchain)
+   return 'https://alltheblocks.net/{0}'.format(alltheblocks_blockchain)
+
+app.jinja_env.filters['alltheblocks_blockchainlink'] = alltheblocks_blockchainlink
+
+def alltheblocks_blocklink(block, blockchain):
+    if blockchain == 'mmx':
+        return block # No support at ATB for MMX, so don't link it
+    alltheblocks_blockchain = globals.get_alltheblocks_name(blockchain)
+    return '<a href="https://alltheblocks.net/{0}/block/0x{1}" class="text-white" target="_blank">{1}</a>'.format(alltheblocks_blockchain, block)
+
+app.jinja_env.filters['alltheblocks_blocklink'] = alltheblocks_blocklink
+
+def escape_single_quotes(value):
+    return value.replace("'", "\\'")
+
+app.jinja_env.filters['escape_single_quotes'] = escape_single_quotes

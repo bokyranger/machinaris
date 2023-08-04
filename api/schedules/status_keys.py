@@ -34,6 +34,5 @@ def update():
                     "details": public_keys.text.replace('\r', ''),
                 }
                 utils.send_post('/keys/', payload, debug=False)
-        except:
-            app.logger.info("Failed to load and send public keys status.")
-            app.logger.info(traceback.format_exc())
+        except Exception as ex:
+            app.logger.info("Failed to load and send pulic keys because {0}".format(str(ex)))

@@ -5,6 +5,8 @@ version: [2]
 logging:
         # DO NOT CHANGE THIS IN-CONTAINER PATH USED BY MACHINARIS!
         plots: /root/.chia/plotman/logs
+        transfers: /root/.chia/plotman/logs/archiving
+        application: /root/.chia/plotman/logs/plotman.log
 
 user_interface:
         use_stty_size: False
@@ -30,7 +32,7 @@ directories:
 
         # Optional: tmp2 directory.  If specified, will be passed to
         # the chia and madmax plotters as the '-2' param.
-        # tmp2: /plotting2
+        #tmp2: /plotting2
 
         # One or more directories; the scheduler will use all of them.
         # These again are presumed to be on independent physical devices,
@@ -42,13 +44,10 @@ directories:
 
 # See: https://github.com/guydavis/machinaris/wiki/Plotman#archiving
 #archiving:
-        #target: rsyncd
+        #target: local_rsync
         #env:
-                #site_root: /mnt/disks
-                #user: root
-                #host: aragorn
-                #rsync_port: 12000
-                #site: disks
+                #site_root: /
+                #site_path_filter: plots
 
 # Plotting scheduling parameters
 scheduling:
@@ -100,28 +99,22 @@ plotting:
         # See 'Settings | Pools' page, for 'Pool contract address' value, UNCOMMENT IF PORTABLE PLOTTING!!!
         #pool_contract_address: REPLACE_WITH_THE_REAL_VALUE
 
-        # If you enable 'chia', plot in *parallel* with higher tmpdir_max_jobs and global_max_jobs
-        # If you enable 'madmax', plot in *sequence* with very low tmpdir_max_jobs and global_max_jobs
-        type: madmax
+        type: bladebit
 
-        chia:
-                # The stock plotter: https://github.com/Chia-Network/chia-blockchain
-                k: 32                # k-size of plot, leave at 32 most of the time
-                e: False             # Disable bitfield back sorting (default is True) 
-                n_threads: 2         # Threads per job
-                n_buckets: 128       # Number of buckets to split data into
-                job_buffer: 3389     # Per job memory
+        bladebit:
+                # BladeBit plotter; see https://github.com/guydavis/machinaris/wiki/Bladebit
+                threads: 4            # Threads per job
+                no_numa: true         # Whether to disable NUMA memory support or not
+                compression: 0        # Compression level (default = 0, min = 0, max = 6)
+                mode: diskplot        # Either enable ramplot, diskplot, or gpuplot. 
+                diskplot_cache:   4GB # If diskplot, amount of RAM to allocate to caching disk writes
+                diskplot_buckets: 256 # Optionally set a different number of buckets to use for diskplot
 
         madmax:
-                # madMAx plotter: https://github.com/madMAx43v3r/chia-plotter
+                # Classic Madmax plotter; see https://github.com/guydavis/machinaris/wiki/MadMax
                 k: 32                 # Default is 32 for Chia, but can do 33 or 34. Use 29,30,31 for Chives
                 n_threads: 4          # Default is 4, SLOWLY crank up if you have many cores
                 n_buckets: 256        # Default is 256
                 n_buckets3: 256       # Default is 256
                 n_rmulti2: 1          # Default is 1
-                network_port: 8444    # Default is 8444, but use 9699 for Chives
-
-        bladebit:
-                # BladeBit plotter: https://github.com/harold-b/bladebit
-                threads: 2            # Threads per job
-                no_numa: false        # Whether to disable NUMA memory support or not
+                network_port: 8444    # Use is 8444 for Chia

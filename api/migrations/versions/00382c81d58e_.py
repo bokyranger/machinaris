@@ -15,16 +15,12 @@ down_revision = 'e5c6d9a6d9c3'
 branch_labels = None
 depends_on = None
 
-
 def upgrade(engine_name):
     globals()["upgrade_%s" % engine_name]()
 
 
 def downgrade(engine_name):
     globals()["downgrade_%s" % engine_name]()
-
-
-
 
 
 def upgrade_():
@@ -376,3 +372,50 @@ def downgrade_stat_plotting_disk_free():
     pass
     # ### end Alembic commands ###
 
+def upgrade_stat_farmed_blocks():
+    pass
+
+def downgrade_stat_farmed_blocks():
+    pass
+
+def upgrade_stat_wallet_balances():
+    pass
+
+def downgrade_stat_wallet_balances():
+    pass
+
+def upgrade_stat_total_balance():
+    pass
+
+def downgrade_stat_total_balance():
+    pass
+
+def upgrade_stat_effort():
+    pass
+
+def downgrade_stat_effort():
+    pass
+
+def upgrade_warnings():
+    pass
+
+def downgrade_warnings():
+    pass
+
+def upgrade_stat_container_mem_gib():
+    pass
+
+def downgrade_stat_container_mem_gib():
+    pass
+
+def upgrade_stat_host_mem_pct():
+    pass
+
+def downgrade_stat_host_mem_pct():
+    pass
+
+def upgrade_transfers():
+    pass
+
+def downgrade_transfers():
+    pass

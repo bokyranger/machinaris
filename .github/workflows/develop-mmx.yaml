@@ -7,7 +7,7 @@ on:
 
 jobs:
   docker:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       -
         name: Checkout
@@ -33,16 +33,20 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       -
         name: Build and push
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v4
         with:
           file: docker/dockerfile
           context: .
           platforms: linux/amd64
+          provenance: false
           push: true
           build-args: |
+            "UBUNTU_VER=jammy"
             "MACHINARIS_STREAM=develop"
             "MMX_BRANCH=master"
             "CHIA_BRANCH=latest"
+            "MADMAX_BRANCH=master"
+            "PLOTMAN_BRANCH=development"
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/machinaris-mmx:develop
             ghcr.io/${{ secrets.DOCKERHUB_USERNAME }}/machinaris-mmx:develop

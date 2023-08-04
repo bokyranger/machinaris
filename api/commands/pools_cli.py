@@ -57,7 +57,15 @@ def dispatch_action(job):
             choice = get_job_parameter(job,"choices", i)
             pool_url = get_job_parameter(job,"pool_urls", i)
             current_pool_url = get_job_parameter(job,"current_pool_urls", i)
-            result = process_pool_save(blockchain, choice, pool_wallet_id, pool_url, current_pool_url, launcher_id)
+            fee_coins = "0"
+            try:
+                fee_mojos = int(get_job_parameter(job,"fee_mojos", i))
+                fee_coins = fee_mojos / globals.get_mojos_per_coin(blockchain)
+                fee_coins = f'{fee_coins:.12f}' 
+                app.logger.info("Converted fee of {0} mojos to {1} coins.".format(fee_mojos, fee_coins))
+            except Exception as ex:
+                app.logger.info("Unable to convert {0} mojos to coins due to {1}".format(blockchain, str(ex)))
+            result = process_pool_save(blockchain, choice, pool_wallet_id, pool_url, current_pool_url, launcher_id, fee_coins)
             if result:
                 msg += result + ' '
             else:
@@ -80,37 +88,42 @@ def get_pool_login_link(launcher_id):
         stream = os.popen("chia plotnft get_login_link -l {0}".format(launcher_id))
         return stream.read()
     except Exception as ex:
-        app.logger.debug("Failed to get_login_link: {0}".format(str(ex)))
+        app.logger.info("Failed to get_login_link: {0}".format(str(ex)))
     return ""
 
 def load_plotnft_show(blockchain):
+    if not globals.wallet_running():
+        return None
     chia_binary = globals.get_blockchain_binary(blockchain)
     wallet_show = ""
     child = pexpect.spawn("{0} plotnft show".format(chia_binary))
     pool_wallet_id = 1
     while True:
-        i = child.expect(["Wallet height:.*\r\n", "Choose wallet key:.*\r\n", "No online backup file found.*\r\n"], timeout=120)
+        i = child.expect(["Wallet height:.*\r\n", "Wallet keys:.*\r\n", "Choose wallet key:.*\r\n", 
+            "Choose a wallet key .*\r\n", "Active Wallet Key.*\r\n", "No online backup file found.*\r\n"], timeout=30)
         if i == 0:
             app.logger.debug("wallet show returned 'Wallet height...' so collecting details.")
             wallet_show += child.after.decode("utf-8") + child.before.decode("utf-8") + child.read().decode("utf-8")
             break
-        elif i == 1:
+        elif i == 1 or i == 2 or i == 3 or i == 4:
             app.logger.debug("wallet show got index prompt so selecting #{0}".format(pool_wallet_id))
             child.sendline("{0}".format(pool_wallet_id))
             pool_wallet_id += 1
-        elif i == 2:
+        elif i == 5:
             child.sendline("S")
         else:
             app.logger.debug("pexpect returned {0}".format(i))
             wallet_show += "ERROR:\n" + child.after.decode("utf-8") + child.before.decode("utf-8") + child.read().decode("utf-8")
     return Plotnfts(wallet_show)
 
-def process_pool_save(blockchain, choice, pool_wallet_id, pool_url, current_pool_url, launcher_id):
+def process_pool_save(blockchain, choice, pool_wallet_id, pool_url, current_pool_url, launcher_id, fee_coins):
+    if not globals.wallet_running():
+        raise Exception('{0} wallet is not currently running.  Please start it on the Wallets page to perform Pool actions.'.format(blockchain.capitalize()))
     if choice == "self":
         if current_pool_url and pool_wallet_id:
-            return process_pool_leave(blockchain, pool_wallet_id)
+            return process_pool_leave(blockchain, pool_wallet_id, fee_coins)
         elif not pool_wallet_id:
-            return process_self_pool(blockchain, pool_wallet_id)
+            return process_self_pool(blockchain, pool_wallet_id, fee_coins)
         else:
             app.logger.info('Already self-pooling your own NFT.  No changes made to {0}'.format(launcher_id))
             return ""
@@ -118,18 +131,20 @@ def process_pool_save(blockchain, choice, pool_wallet_id, pool_url, current_pool
         if current_pool_url == pool_url:
             app.logger.info('Already pooling with {0}.  No changes made to {1}'.format(pool_url, launcher_id))
             return ""
-        return process_pool_join(blockchain, pool_url, pool_wallet_id)
+        return process_pool_join(blockchain, pool_url, pool_wallet_id, fee_coins)
     raise Exception("Unknown pool save choice provided: {0}".format(choice))
 
-def process_pool_leave(blockchain, pool_wallet_id):
+def process_pool_leave(blockchain, pool_wallet_id, fee_coins):
+    if not globals.wallet_running():
+        raise Exception('{0} wallet is not currently running.  Please start it on the Wallets page to perform Pool actions.'.format(blockchain.capitalize()))
     chia_binary = globals.get_blockchain_binary(blockchain)
-    cmd = "{0} plotnft leave -y -i {1}".format(chia_binary, pool_wallet_id)
+    cmd = "{0} plotnft leave -y -i {1} --fee {2}".format(chia_binary, pool_wallet_id, fee_coins)
     app.logger.info("Attempting to leave pool: {0}".format(cmd))
     result = ""
     child = pexpect.spawn(cmd)
     child.logfile = sys.stdout.buffer
     while True:
-        i = child.expect(["Choose wallet key:.*\r\n", pexpect.EOF])
+        i = child.expect(["Wallet keys:.*\r\n", pexpect.EOF])
         if i == 0:
             app.logger.info("plotnft got index prompt so selecting #{0}".format(pool_wallet_id))
             child.sendline("{0}".format(pool_wallet_id))
@@ -141,7 +156,7 @@ def process_pool_leave(blockchain, pool_wallet_id):
         stdout_lines = result.splitlines()
     out_file = '/root/.chia/machinaris/logs/plotnft.log'
     with open(out_file, 'a') as f:
-        f.write("\n{0} plotnft plotnft leave -y -i 1 --> Executed at: {1}\n".format(blockchain, time.strftime("%Y%m%d-%H%M%S")))
+        f.write("\n{0} plotnft leave -y -i {1} --> Executed at: {2}\n".format(blockchain, pool_wallet_id, time.strftime("%Y%m%d-%H%M%S")))
         for line in stdout_lines:
             f.write(line)
         f.write("\n**********************************************************************\n")
@@ -150,7 +165,9 @@ def process_pool_leave(blockchain, pool_wallet_id):
             raise Exception('Error while leaving pool: ' + line)
     return _('Successfully left pool, switching to self-pooling. Please wait a few minutes or more to complete. DO NOT immediately re-submit your request. View the log for details.')
 
-def process_pool_join(blockchain, pool_url, pool_wallet_id):
+def process_pool_join(blockchain, pool_url, pool_wallet_id, fee_coins):
+    if not globals.wallet_running():
+        raise Exception('{0} wallet is not currently running.  Please start it on the Wallets page to perform Pool actions.'.format(blockchain.capitalize()))
     chia_binary = globals.get_blockchain_binary(blockchain)
     app.logger.info("Attempting to join pool at URL: {0} with wallet_id: {1}".format(pool_url, pool_wallet_id))
     if not pool_url.strip():
@@ -163,17 +180,17 @@ def process_pool_join(blockchain, pool_url, pool_wallet_id):
     if not result.netloc:
         raise Exception("No hostname or IP provided.")
     if pool_wallet_id: # Just joining a pool with existing NFT
-        cmd = "{0} plotnft join -y -u {1} -i {2}".format(chia_binary, pool_url, pool_wallet_id)
+        cmd = "{0} plotnft join -y -u {1} -i {2} --fee {3}".format(chia_binary, pool_url, pool_wallet_id, fee_coins)
         pool_wallet_id = pool_wallet_id
     else:  # Both creating NFT and joining pool in one setp
-        cmd = "{0} plotnft create -y -u {1} -s pool".format(chia_binary, pool_url)
+        cmd = "{0} plotnft create -y -u {1} -s pool --fee {2}".format(chia_binary, pool_url, fee_coins)
         pool_wallet_id = 1
     app.logger.info("Executing: {0}".format(cmd))
     result = ""
     child = pexpect.spawn(cmd)
     child.logfile = sys.stdout.buffer
     while True:
-        i = child.expect(["Choose wallet key:.*\r\n", pexpect.EOF])
+        i = child.expect(["Wallet keys:.*\r\n", pexpect.EOF])
         if i == 0:
             app.logger.info("plotnft got index prompt so selecting #{0}".format(pool_wallet_id))
             child.sendline("{0}".format(pool_wallet_id))
@@ -192,17 +209,19 @@ def process_pool_join(blockchain, pool_url, pool_wallet_id):
         for line in stdout_lines:
             if "Error" in line:
                 raise Exception('Error while joining Chia pool. Please double-check pool URL: {0} {1}'.format(pool_url, line))
-    return _('Successfully joined %(pool_url)s pool by creating Chia NFT.  Please wait a few minutes or more to complete. DO NOT immediately re-submit your request. Be patient! View the log for details.', pool_url=pool_url)
+    return _('Successfully joined %(pool_url)s pool.  Please wait a few minutes or more to complete. DO NOT immediately re-submit your request. Be patient! View the log for details.', pool_url=pool_url)
 
-def process_self_pool(blockchain, pool_wallet_id):
+def process_self_pool(blockchain, pool_wallet_id, fee_coins):
+    if not globals.wallet_running():
+        raise Exception('{0} wallet is not currently running.  Please start it on the Wallets page to perform Pool actions.'.format(blockchain.capitalize()))
     chia_binary = globals.get_blockchain_binary(blockchain)
-    cmd = "{0} plotnft create -y -s local".format(chia_binary)
+    cmd = "{0} plotnft create -y -s local --fee {1}".format(chia_binary, fee_coins)
     app.logger.info("Attempting to create NFT for self-pooling. {0}".format(cmd))
     result = ""
     child = pexpect.spawn(cmd)
     child.logfile = sys.stdout.buffer
     while True:
-        i = child.expect(["Choose wallet key:.*\r\n", pexpect.EOF])
+        i = child.expect(["Wallet keys:.*\r\n", pexpect.EOF])
         if i == 0:
             app.logger.info("plotnft got index prompt so selecting #{0}".format(pool_wallet_id))
             child.sendline("{0}".format(pool_wallet_id))

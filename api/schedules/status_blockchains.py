@@ -34,7 +34,6 @@ def update():
                     "blockchain": blockchain,
                     "details": bc.text.replace('\r', ''),
                 }
-                utils.send_post('/blockchains', payload, debug=False)
-        except:
-            app.logger.info("Failed to load and send blockchains status.")
-            app.logger.info(traceback.format_exc())
+                utils.send_post('/blockchains/', payload, debug=False)
+        except Exception as ex:
+            app.logger.info("Failed to load and send blockchain status because {0}".format(str(ex)))

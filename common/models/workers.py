@@ -65,6 +65,12 @@ class Worker(db.Model):
             except:
                 return "unknown"
     
+    def container_memory_usage_gib(self):
+        try:
+            return "{:.2f} GiB".format(int(j.loads(self.services)['container_memory_usage_bytes']) / 1024 / 1024 / 1024)
+        except Exception as ex:
+            return ''
+    
     def connection_status(self):
         fifteen_mins_ago = dt.datetime.now() - dt.timedelta(minutes=15)
         if self.ping_success_at and self.ping_success_at >= fifteen_mins_ago:
@@ -76,5 +82,11 @@ class Worker(db.Model):
     def machinaris_version(self):
         try:
             return j.loads(self.config)['machinaris_version']
+        except:
+            return None
+
+    def fullnode_db_version(self):
+        try:
+            return j.loads(self.config)['fullnode_db_version']
         except:
             return None

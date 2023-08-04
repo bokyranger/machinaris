@@ -31,9 +31,6 @@ MADMAX_BINARY = '/usr/bin/chia_plot'
 BLADEBIT_BINARY = '/usr/bin/bladebit'
 CHIADOG_PATH = '/chiadog'
 
-MMX_NETWORK = 'testnet5'
-MMX_CONFIG = 'testnet5'
-
 RELOAD_MINIMUM_DAYS = 1  # Don't run binaries for version again until this time expires
 
 INFO_FILE = '/machinaris/common/config/blockchains.json'
@@ -48,6 +45,11 @@ def get_supported_blockchains():
 def get_blockchain_binary(blockchain):
     return load_blockchain_info(blockchain, 'binary')
 
+def get_blockchain_working_dir(blockchain):
+    if blockchain == 'gigahorse':
+        return os.path.dirname(get_blockchain_binary(blockchain))
+    return None # Default for other blockchains that are cwd-independent
+
 def get_blockchain_network_path(blockchain):
     return load_blockchain_info(blockchain, 'network_path')
 
@@ -57,6 +59,9 @@ def get_blockchain_network_name(blockchain):
 def get_blockchain_symbol(blockchain):
     return load_blockchain_info(blockchain, 'symbol')
 
+def get_blockchain_network_port(blockchain):
+    return load_blockchain_info(blockchain, 'network_port')
+
 def get_full_node_rpc_port(blockchain):
     return load_blockchain_info(blockchain, 'fullnode_rpc_port')
 
@@ -65,6 +70,9 @@ def get_blocks_per_day(blockchain):
 
 def get_block_reward(blockchain):
     return load_blockchain_info(blockchain, 'reward')
+
+def get_mojos_per_coin(blockchain):
+    return load_blockchain_info(blockchain, 'mojos_per_coin')
 
 def load():
     cfg = {}
@@ -77,13 +85,19 @@ def load():
     cfg['machinaris_version'] = load_machinaris_version()
     cfg['machinaris_mode'] = os.environ['mode']
     cfg['plotman_version'] = load_plotman_version()
-    cfg['blockchain_version'] = load_blockchain_version(enabled_blockchains()[0])
+    cfg['blockchain_version'] = load_blockchain_version(cfg['enabled_blockchains'][0])
     cfg['chiadog_version'] = load_chiadog_version()
     cfg['madmax_version'] = load_madmax_version()
     cfg['bladebit_version'] = load_bladebit_version()
-    cfg['farmr_version'] = load_farmr_version()
     cfg['is_controller'] = "localhost" == (
         os.environ['controller_host'] if 'controller_host' in os.environ else 'localhost')
+    fullnode_db_version = load_fullnode_db_version()
+    if fullnode_db_version:
+        cfg['fullnode_db_version'] = fullnode_db_version
+    if 'fullnode' in cfg['machinaris_mode']:
+        cfg['wallet_status'] = "running" if wallet_running() else "paused"
+        if cfg['enabled_blockchains'][0] == 'mmx':
+            cfg['mmx_reward'] = gather_mmx_reward()
     return cfg
 
 def load_blockchain_info(blockchain, key):
@@ -144,8 +158,9 @@ def is_setup():
                 logging.info(traceback.format_exc())
     return foundKey
 
-# On very first launch of the main Chia container, blockchain DB 7zip is being downloaded so must wait.
-CHIA_BLOCKCHAIN_DB_SIZE = 65 * 1024 * 1024 * 1024 # 65 uncompressed GB in 2022
+# On very first launch of the main Chia container, blockchain DB gz is being downloaded via torrent so must wait.
+CHIA_COMPRESSED_DB_SIZE = 56 * 1024 * 1024 * 1024 # Compressed GB in March 2023
+CHIA_BLOCKCHAIN_DB_SIZE = 106 * 1024 * 1024 * 1024 # Uncompressed GB in March 2023
 def blockchain_downloading():
     db_path = '/root/.chia/mainnet/db'
     if path.exists(f"{db_path}/blockchain_v1_mainnet.sqlite") or path.exists(f"{db_path}/blockchain_v2_mainnet.sqlite"):
@@ -154,8 +169,16 @@ def blockchain_downloading():
     if not path.exists(tmp_path):
         logging.info("No folder at {0} yet...".format(tmp_path))
         return [0, "0 GB"]
-    bytes = sum(f.stat().st_size for f in pathlib.Path(tmp_path).glob('**/*') if f.is_file())
-    return [ round(100*bytes/CHIA_BLOCKCHAIN_DB_SIZE, 2), converters.convert_size(bytes) ]
+    target_size = CHIA_COMPRESSED_DB_SIZE + CHIA_BLOCKCHAIN_DB_SIZE
+    if path.exists(db_path + '/chia/.chiadb_decompressed_on_the_fly'): # If decompressed via pipe from download
+        target_size = CHIA_BLOCKCHAIN_DB_SIZE
+    # Chia and Gigahorse download via libtorrent that allocates full file size before any downloading, so use status file
+    if path.exists(db_path + '/chia/.chiadb_download_size'):
+        with open(db_path + '/chia/.chiadb_download_size',"r") as f:
+            bytes = int(f.read())
+    else: # Later when decompressing, just read file sizes on disk
+        bytes = sum(f.stat().st_size for f in pathlib.Path(tmp_path).glob('**/*') if f.is_file())
+    return [ round(100*bytes/(target_size), 2), converters.convert_size(bytes) ]
 
 def get_key_paths():
     if "keys" not in os.environ:
@@ -165,13 +188,13 @@ def get_key_paths():
     return os.environ['keys'].split(':')
 
 def farming_enabled():
-    return "mode" in os.environ and ("farmer" in os.environ['mode'] or "fullnode" == os.environ['mode'])
+    return "mode" in os.environ and ("farmer" in os.environ['mode'] or "fullnode" in os.environ['mode'])
 
 def harvesting_enabled():
-    return "mode" in os.environ and ("harvester" in os.environ['mode'] or "fullnode" == os.environ['mode'])
+    return "mode" in os.environ and ("harvester" in os.environ['mode'] or "fullnode" in os.environ['mode'])
 
 def plotting_enabled():
-    return "mode" in os.environ and ("plotter" in os.environ['mode'] or "fullnode" == os.environ['mode']) \
+    return "mode" in os.environ and ("plotter" in os.environ['mode'] or "fullnode" in os.environ['mode']) \
         and enabled_blockchains()[0] in pl.PLOTTABLE_BLOCKCHAINS
 
 def enabled_blockchains():
@@ -196,9 +219,22 @@ def archiving_enabled():
         logging.info("Failed to read plotman.yaml so archiving_enabled=False.")
         logging.info(traceback.format_exc())
 
+# Ignore error at CLI about "data_layer.crt" that is still NOT fixed, despite being "closed".
+# https://github.com/Chia-Network/chia-blockchain/issues/13257
+def strip_data_layer_msg(lines):
+    useful_lines = []
+    for line in lines:
+        if "data_layer.crt" in line:
+            pass
+        else:
+            useful_lines.append(line)
+    return useful_lines
+
 last_blockchain_version = None
 last_blockchain_version_load_time = None
 def load_blockchain_version(blockchain):
+    if blockchain == 'mmx':
+        return "recent" # Author didn't bother to version his binaries
     chia_binary = get_blockchain_binary(blockchain)
     global last_blockchain_version
     global last_blockchain_version_load_time
@@ -210,19 +246,27 @@ def load_blockchain_version(blockchain):
         proc = Popen("{0} version".format(chia_binary),
                 stdout=PIPE, stderr=PIPE, shell=True)
         outs, errs = proc.communicate(timeout=90)
-        # Chia version with .dev is actually one # to high
-        # See: https://github.com/Chia-Network/chia-blockchain/issues/5655
-        last_blockchain_version = outs.decode('utf-8').strip()
+        last_blockchain_version = strip_data_layer_msg(outs.decode('utf-8').strip().splitlines())[0]
         if "@@@@" in last_blockchain_version:  # SSL warning 
             try:
                 os.system("chia init --fix-ssl-permissions")
             except:
                 pass
             last_blockchain_version = ""
-        if last_blockchain_version.endswith('dev0'):
-            sem_ver = last_blockchain_version.split('.')
-            last_blockchain_version = sem_ver[0] + '.' + \
-                sem_ver[1] + '.' + str(int(sem_ver[2])-1)
+        if last_blockchain_version.endswith('dev0') or last_blockchain_version.endswith('dev1'):
+            if 'rc' in last_blockchain_version: # Strip out 'rcX' if found.
+                last_blockchain_version = last_blockchain_version[:last_blockchain_version.index('rc')]
+            elif 'b1' in last_blockchain_version: # Strip out 'b1' if found.
+                last_blockchain_version = last_blockchain_version[:last_blockchain_version.index('b1')]
+            elif 'b2' in last_blockchain_version: # Strip out 'b2' if found.
+                last_blockchain_version = last_blockchain_version[:last_blockchain_version.index('b2')]
+            elif 'b3' in last_blockchain_version: # Strip out 'b3' if found.
+                last_blockchain_version = last_blockchain_version[:last_blockchain_version.index('b3')]
+            else:
+                # Chia version with .dev is actually one # to high, never fixed by Chia team...
+                # See: https://github.com/Chia-Network/chia-blockchain/issues/5655
+                sem_ver = last_blockchain_version.split('.')
+                last_blockchain_version = sem_ver[0] + '.' + sem_ver[1] + '.' + str(int(sem_ver[2])-1)
         elif '.dev' in last_blockchain_version:
             sem_ver = last_blockchain_version.split('.')
             last_blockchain_version = sem_ver[0] + '.' + sem_ver[1] + '.' + sem_ver[2]
@@ -267,7 +311,7 @@ def load_plotman_version():
         proc.kill()
         proc.communicate()
     except:
-        logging.info(traceback.format_exc())
+        logging.error(traceback.format_exc())
     last_plotman_version_load_time = datetime.datetime.now()
     return last_plotman_version
 
@@ -295,7 +339,7 @@ def load_chiadog_version():
         proc.kill()
         proc.communicate()
     except:
-        logging.info(traceback.format_exc())
+        logging.error(traceback.format_exc())
     last_chiadog_version_load_time = datetime.datetime.now()
     return last_chiadog_version
 
@@ -311,19 +355,15 @@ def load_madmax_version():
         return last_madmax_version
     last_madmax_version = ""
     try:
-        proc = Popen("{0} --help".format(MADMAX_BINARY),
+        proc = Popen("{0} --version".format(MADMAX_BINARY),
             stdout=PIPE, stderr=PIPE, shell=True)
-        outs, errs = proc.communicate(timeout=90)
-        for line in outs.decode('utf-8').splitlines():
-            m = re.search(
-                r'^Multi-threaded pipelined Chia k32 plotter - (\w+)$', line, flags=re.IGNORECASE)
-            if m:
-                last_madmax_version = m.group(1)
+        outs, errs = proc.communicate(timeout=90)  # Example: 1.1.8-d1a9e88
+        last_madmax_version = outs.decode('utf-8').strip().split('-')[0]
     except TimeoutExpired:
         proc.kill()
         proc.communicate()
     except:
-        logging.info(traceback.format_exc())
+        logging.error(traceback.format_exc())
     last_madmax_version_load_time = datetime.datetime.now()
     return last_madmax_version
 
@@ -355,28 +395,6 @@ def load_bladebit_version():
     last_bladebit_version_load_time = datetime.datetime.now()
     return last_bladebit_version
 
-last_farmr_version = None
-last_farmr_version_load_time = None
-def load_farmr_version():
-    global last_farmr_version
-    global last_farmr_version_load_time
-    if last_farmr_version_load_time and last_farmr_version_load_time >= \
-            (datetime.datetime.now() - datetime.timedelta(days=RELOAD_MINIMUM_DAYS)):
-        return last_farmr_version
-    last_farmr_version = ""
-    try:
-        proc = Popen("apt-cache policy farmr | grep -i installed | cut -f 2 -d ':'",
-                stdout=PIPE, stderr=PIPE, shell=True)
-        outs, errs = proc.communicate(timeout=90)
-        last_farmr_version = outs.decode('utf-8').strip()
-    except TimeoutExpired:
-        proc.kill()
-        proc.communicate()
-    except:
-        logging.debug(traceback.format_exc())
-    last_farmr_version_load_time = datetime.datetime.now()
-    return last_farmr_version
-
 last_machinaris_version = None
 last_machinaris_version_load_time = None
 def load_machinaris_version():
@@ -393,6 +411,28 @@ def load_machinaris_version():
         logging.info(traceback.format_exc())
     last_machinaris_version_load_time = datetime.datetime.now()
     return last_machinaris_version
+
+fullnode_db_version = None
+fullnode_db_version_load_time = None
+def load_fullnode_db_version():
+    global fullnode_db_version
+    global fullnode_db_version_load_time
+    if fullnode_db_version_load_time and fullnode_db_version_load_time >= \
+            (datetime.datetime.now() - datetime.timedelta(days=RELOAD_MINIMUM_DAYS)):
+        return fullnode_db_version
+    fullnode_db_version = None
+    blockchain = enabled_blockchains()[0]
+    v1_db_file = get_blockchain_network_path(blockchain) + '/db/blockchain_v1_mainnet.sqlite'
+    v2_db_file = get_blockchain_network_path(blockchain) + '/db/blockchain_v2_mainnet.sqlite'
+    try:
+        if os.path.exists(v2_db_file):
+            return "v2"
+        elif os.path.exists(v1_db_file):
+            return "v1"
+    except:
+        logging.info(traceback.format_exc())
+    fullnode_db_version_load_time = datetime.datetime.now()
+    return fullnode_db_version
 
 def get_disks(disk_type):
     if disk_type == "plots":
@@ -411,3 +451,92 @@ def get_disks(disk_type):
             logging.info("Unable to find any plotting for stats.")
             logging.info(traceback.format_exc())
             return []
+
+def get_alltheblocks_name(blockchain):
+    if blockchain == 'staicoin':
+        return 'stai' # Special case for staicoin's inconsistent naming convention
+    elif blockchain == 'gigahorse':
+        return 'chia' # Special case for gigahorse which is really Chia
+    return blockchain
+
+def legacy_blockchain(blockchain):
+    return blockchain in ['ballcoin', 'coffee', 'ecostake', 'greenbtc', 'gold', 'mint', 'nchain', 'petroleum', 'profit', 'silicoin', 'stor']
+
+last_mmx_reward = None
+last_mmx_reward_load_time = None
+def gather_mmx_reward():
+    mmx_binary = get_blockchain_binary('mmx')
+    global last_mmx_reward
+    global last_mmx_reward_load_time
+    if last_mmx_reward_load_time and last_mmx_reward_load_time >= \
+            (datetime.datetime.now() - datetime.timedelta(minutes=15)):
+        return last_mmx_reward
+    last_mmx_reward = ""
+    try:
+        proc = Popen("{0} node info | grep -i reward".format(mmx_binary),
+                stdout=PIPE, stderr=PIPE, shell=True)
+        outs, errs = proc.communicate(timeout=90)
+        reward_line = outs.decode('utf-8').strip()
+        if reward_line.startswith("Reward:"):
+            # Example -> "Reward:   0.439271 MMX"
+            last_mmx_reward = reward_line.split(':')[1][:-3].strip()
+    except TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+    except:
+        logging.error(traceback.format_exc())
+    last_mmx_reward_load_time = datetime.datetime.now()
+    return last_mmx_reward
+
+def wallet_running():
+    blockchain = enabled_blockchains()[0]
+    if blockchain == 'mmx':
+        return True # Always running for MMX
+    chia_binary_short = get_blockchain_binary(blockchain).split('/')[-1]
+    try:
+        cmd = "pidof {0}_wallet".format(chia_binary_short)
+        proc = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+        outs, errs = proc.communicate(timeout=90)
+        pid = outs.decode('utf-8').strip()
+        #print("{0} --> {1}".format(cmd, pid))
+        if pid:
+            return True
+        else:
+            return False
+    except TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+    except:
+        logging.error(traceback.format_exc())
+    return False
+
+def get_container_memory_usage_bytes():
+    try: # Check cgroups v1
+        with open("/sys/fs/cgroup/memory/memory.usage_in_bytes", "r") as f:
+            return int(f.readline())
+    except Exception as ex:
+        pass
+    try: # Check cgroups v2
+        with open("/sys/fs/cgroup/memory.current", "r") as f:
+            return int(f.readline())
+    except Exception as ex:
+        pass
+    return None
+
+def get_host_memory_usage_percent():
+    try:
+        total_mem = None
+        avail_mem = None
+        with open("/proc/meminfo", "r") as f:
+            for line in f.readlines():
+                if line.startswith('MemTotal:'):
+                    #logging.error("{0} -> {1}".format(line, line.split(':')[1].strip().split(' ')[0]))
+                    total_mem = int(line.split(':')[1].strip().split(' ')[0])
+                elif line.startswith('MemAvailable:'):
+                    #logging.error("{0} -> {1}".format(line, line.split(':')[1].strip().split(' ')[0]))
+                    avail_mem = int(line.split(':')[1].strip().split(' ')[0])
+        if total_mem and avail_mem:
+            return 100 - int(avail_mem / total_mem * 100)  # Used memory percentage
+    except Exception as ex:
+        logging.error("Failed to calculate total host memory usage percentage due to: {0}".format(str(ex)))
+    return None

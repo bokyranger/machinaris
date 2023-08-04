@@ -2,6 +2,34 @@
 
 {% block content %}
 
+<div class="modal fade" id="testModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="testModalLabel" aria-hidden="true">
+    <div class="modal-dialog bg-dark rounded-3">
+        <div class="modal-content bg-dark">
+          <form method="POST" id="test-form">
+            <input type="hidden" id="hostname_field" name="worker" value="" />
+            <input type="hidden" id="blockchain_field" name="blockchain" value="" />
+            <input type="hidden" name="action" value="test"/>
+            <div class="modal-header bg-dark">
+                <h5 class="modal-title" id="testModalLabel">{{_('Send Test Alert')}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-dark">
+              {% autoescape false %}
+              {{_('This will send a test alert using your %(wikilink_open)slast saved settings%(wikilink_close)s for', 
+                wikilink_open='<a href="https://github.com/guydavis/machinaris/wiki/ChiaDog#configuration" class="text-white" target="_blank">', wikilink_close='</a>')}}
+              <span id="blockchain_label"></span> on <span id="hostname_label"></span>.
+                {{_('Please save before testing. Continue?')}}
+                {% endautoescape %} 
+            </div>
+            <div class="modal-footer bg-dark">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancelTest">{{_('Cancel')}}</button>
+                <button type="button" class="btn btn-outline-success" id="btnConfirmTest">{{_('Send')}}</button>
+            </div>
+          </form>
+        </div>
+    </div>
+</div>
+
 <div class="position-relative">
     <div class="position-absolute top-0 end-0" style="z-index: 2000;">
         <a href="https://github.com/guydavis/machinaris/wiki/Chiadog" target="_blank">
@@ -11,6 +39,8 @@
 </div>
 
 <header class="pb-3 mb-4 border-bottom">
+    <button type="button" class="btn btn-success fw-bold" style="float:right; margin-right:150px" data-bs-toggle="modal" 
+    data-bs-target="#testModal">{{_('Send Test Alert')}}</button>
     <span class="fs-4">{{_('Alerts')}} - config.yaml </span>
 </header>
 
@@ -30,7 +60,7 @@
         {% endwith %}
     </div>
 
-    <form method="POST">
+    <form method="POST" id="settings-form">
         <fieldset>
             <div class="row mb-3">
                 <label for="worker" class="col-sm-1 col-form-label-lg text-end p-1">{{_('Worker')}}</label>
@@ -47,15 +77,23 @@
                     <select id="blockchain" name="blockchain" class="form-select">
                     </select>
                 </div>
+                <div class="col-sm-3">
+                    <div id="loading_div" class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="mb-3" id="texteditor">
-                <textarea style="background: #D3D3D3;" class="form-control fs-6" id="config" name="config" rows="18"
+                <textarea style="background: #D3D3D3; font-family: monospace; font-size: 80%;" class="form-control" id="config" name="config" rows="35"
                     style="height:100%;"></textarea>
             </div>
-            <button type="submit" class="btn btn-outline-success">{{_('Save')}}</button>
-            <button type="button" class="btn btn-outline-success"
-                onclick="downloadConfig(); return false">{{_('Download')}}</button>
-        </fieldset>
+            <button type="submit" class="btn btn-outline-success"
+            id="btnSave">{{_('Save')}}</button>
+        <button type="button" class="btn btn-outline-success"
+            id="btnDownload">{{_('Download')}}</button>
+    </fieldset>
     </form>
 
     {% endblock %}
@@ -64,14 +102,24 @@
     <script>
         $(document).ready(function () {
             function load_config(worker, blockchain) {
+                $('#loading_div').show();
+                $("#config").prop('disabled', true);
+                $("#btnSave").prop('disabled', true);
+                $("#btnDownload").prop('disabled', true);
                 $.ajax({
                     type: "GET",
                     url: "{{ url_for('views_settings_config') }}?type=alerts&worker=" + worker + "&blockchain=" + blockchain,
                 })
                     .done(function (data) {
                         $("#config").val(data)
+                        $('#loading_div').hide();
+                        $("#config").prop('disabled', false);
+                        $("#btnSave").prop('disabled', false);
+                        $("#btnDownload").prop('disabled', false);
                     }).fail(function (jqXHR, textStatus, errorThrown) {
+                        $('#loading_div').hide();
                         console.log(jqXHR, textStatus, errorThrown);
+                        alert("Failed to retrieve configuration in a timely fashion.  Please check server load and refresh this page.");
                     });
             }
             update_blockchain_options("{{selected_worker}}");
@@ -85,6 +133,17 @@
             });
             //Call the function when the page loads
             load_config("{{selected_worker}}", "{{selected_blockchain}}");
+
+            var testModal = document.getElementById('testModal')
+            testModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget
+                var blockchainField = document.getElementById('blockchain_field')
+                blockchainField.value = $("#blockchain").val()
+                $('#blockchain_label').text($("#blockchain option:selected").text())
+                var workerField = document.getElementById('hostname_field')
+                workerField.value = $("#worker").val()
+                $('#hostname_label').text($("#worker option:selected").text())
+            })
         });
 
         function update_blockchain_options(hostname) {
@@ -107,11 +166,25 @@
                 $el.append(option);
             };
         }
-
-        function downloadConfig() {
+        $("#btnSave").click(function () {
+            $(this).prop("disabled", true);
+            $(this).html(
+                `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> {{_('Saving...')}}`
+            );
+            $("#settings-form").submit();
+        });
+        $("#btnDownload").click(function () {
             worker = $("#worker").val()
             blockchain = $("#blockchain").val()
-            window.location.href = '/settings/config/' + worker + '_' + blockchain + 'dog_config.yaml?type=alerts&worker=' + worker + "&blockchain=" + blockchain
-        }
+            window.location.href = '/settings/config/' + worker + '_' + blockchain + '_alerts_config.yaml?type=alerts&worker=' + worker + "&blockchain=" + blockchain
+        });
+        $("#btnConfirmTest").click(function () {
+            $("#btnCancelTest").prop("disabled", true);
+            $(this).prop("disabled", true);
+            $(this).html(
+                `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...`
+            );
+            $("#test-form").submit();
+        });
     </script>
     {% endblock %}

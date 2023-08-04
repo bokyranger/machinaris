@@ -1,4 +1,5 @@
 import datetime as dt
+import traceback
 
 from flask.views import MethodView
 
@@ -37,7 +38,10 @@ class Wallets(MethodView):
         blockchain = new_item['blockchain']
         item = db.session.query(Wallet).filter(Wallet.hostname==new_item['hostname'], \
             Wallet.blockchain==blockchain).first()
-        new_item['cold_balance'] = websvcs.cold_wallet_balance(blockchain)
+        try:
+            new_item['cold_balance'] = websvcs.cold_wallet_balance(blockchain)
+        except Exception as ex:
+            app.logger.error("Failed to get cold wallet balance for {0} due to {1}".format(blockchain, str(ex)))
         if item: # upsert
             new_item['created_at'] = item.created_at
             new_item['updated_at'] = dt.datetime.now()
@@ -55,7 +59,7 @@ class WalletsByHostname(MethodView):
     @blp.etag
     @blp.response(200, WalletSchema)
     def get(self, hostname, blockchain):
-        return db.session.query(Wallet).get_or_404(hostname)
+        return db.session.query(Wallet).filter(Wallet.hostname==hostname, Wallet.blockchain==blockchain).first()
 
     @blp.etag
     @blp.arguments(WalletSchema)
@@ -73,8 +77,8 @@ class WalletsByHostname(MethodView):
 
     @blp.etag
     @blp.response(204)
-    def delete(self, hostname):
-        item = db.session.query(Wallet).get_or_404(hostname)
+    def delete(self, hostname, blockchain):
+        item = db.session.query(Wallet).filter(Wallet.hostname==hostname, Wallet.blockchain==blockchain).first()
         blp.check_etag(item, WalletSchema)
         db.session.delete(item)
         db.session.commit()

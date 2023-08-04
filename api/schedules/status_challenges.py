@@ -50,6 +50,5 @@ def update():
                         "created_at": challenge['created_at'],
                     })
             utils.send_post('/challenges/', payload, debug=False)
-        except:
-            app.logger.info("Failed to load recent challenges and send.")
-            app.logger.info(traceback.format_exc())
+        except Exception as ex:
+            app.logger.info("Failed to load and send recent challenges because {0}".format(str(ex)))

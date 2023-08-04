@@ -14,6 +14,7 @@ import shutil
 import socket
 import sys
 import time
+import threading
 import traceback
 import urllib
 import yaml
@@ -30,18 +31,18 @@ from web import app, db, utils
 from common.models import farms as f, plots as p, challenges as c, wallets as w, \
     blockchains as b, connections as co, keys as k
 from common.config import globals
-from web.models.chia import FarmSummary, FarmPlots, Wallets, \
+from web.models.chia import FarmSummary, FarmPlots, Wallets, Transactions, \
     Blockchains, Connections, Keys, ChallengesChartData, Summaries
 from . import worker as wk
 from . import stats
+from api.schedules import plots_check
 
 COLD_WALLET_ADDRESSES_FILE = '/root/.chia/machinaris/config/cold_wallet_addresses.json'
+WALLET_SETTINGS_FILE = '/root/.chia/machinaris/config/wallet_settings.json'
 
 def load_farm_summary():
     farms = db.session.query(f.Farm).order_by(f.Farm.hostname).all()
     wallets = db.session.query(w.Wallet).order_by(w.Wallet.blockchain).all()
-    if len(farms) == 0:
-        flash(_("Relax and grab a coffee. Status is being gathered from active workers.  Please allow 15 minutes..."), 'info')
     return FarmSummary(farms, wallets)
 
 def load_plots_farming(hostname=None):
@@ -76,6 +77,7 @@ def order_plots_query(args, query):
 
 def search_plots_query(search, query):
     app.logger.info("Searching all plots for: {0}".format(search))
+    search = '%{0}%'.format(search)
     query = query.filter(or_(
         p.Plot.displayname.like(search),
         p.Plot.blockchain.like(search),
@@ -154,7 +156,13 @@ def load_keys():
     return Keys(keys)
     
 def load_farmers():
-    return wk.load_worker_summary().farmers_harvesters()
+    farmers = wk.load_worker_summary().farmers_harvesters()
+    for farmer in farmers:
+        #app.logger.info("Load farmer statistics for {0}".format(farmer.displayname))
+        farmer.plot_counts = str(stats.count_plots_by_ksize(farmer.hostname))[1:-1].replace("'", "")
+        farmer.plot_types = str(stats.count_plots_by_type(farmer.hostname))[1:-1].replace("'", "")
+        farmer.drive_count = stats.count_drives(farmer.hostname)
+    return farmers
 
 def load_config(farmer, blockchain):
     return utils.send_get(farmer, "/configs/farming/"+ blockchain, debug=False).content
@@ -164,64 +172,63 @@ def save_config(farmer, blockchain, config):
         yaml.safe_load(config)
     except Exception as ex:
         app.logger.info(traceback.format_exc())
-        flash('Updated config.yaml failed validation! Fix and save or refresh page.', 'danger')
+        flash(_('Updated config.yaml failed validation! Fix and save or refresh page.'), 'danger')
         flash(str(ex), 'warning')
     try:
         utils.send_put(farmer, "/configs/farming/" + blockchain, config, debug=False)
     except Exception as ex:
-        flash('Failed to save config to farmer.  Please check log files.', 'danger')
+        flash(_('Failed to save config to farmer.  Please check log files.'), 'danger')
         flash(str(ex), 'warning')
     else:
-        flash('Nice! Farming config validated and saved successfully. Worker services now restarting. Please allow 10-15 minutes to take effect.', 'success')
+        flash(_('Nice! Farming config validated and saved successfully. Worker services now restarting. Please allow 15 minutes to take effect.'), 'success')
 
 def generate_key(key_path, blockchain):
     chia_binary = globals.get_blockchain_binary(blockchain)
     if os.path.exists(key_path) and os.stat(key_path).st_size > 0:
         app.logger.info('Skipping key generation as file exists and is NOT empty! {0}'.format(key_path))
-        flash('Skipping key generation as file exists and is NOT empty!', 'danger')
-        flash('In-container path: {0}'.format(key_path), 'warning')
+        flash(_('Skipping key generation as file exists and is NOT empty!'), 'danger')
+        flash(_('In-container path:') +  ' {0}'.format(key_path), 'warning')
         return False
-    proc = Popen("{0} keys generate".format(chia_binary), stdout=PIPE, stderr=PIPE, shell=True)
+    proc = Popen("{0} keys generate --label key_0".format(chia_binary), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            app.logger.error("{0}".format(errs.decode('utf-8')))
+            flash(_('Unable to generate keys!'), 'danger')
+            return False
     except TimeoutExpired as ex:
         proc.kill()
         proc.communicate()
         app.logger.info(traceback.format_exc())
-        flash('Timed out while generating keys!', 'danger')
+        flash(_('Timed out while generating keys!'), 'danger')
         flash(str(ex), 'warning')
-        return False
-    if errs:
-        app.logger.info("{0}".format(errs.decode('utf-8')))
-        flash('Unable to generate keys!', 'danger')
         return False
     proc = Popen("{0} keys show --show-mnemonic-seed | tail -n 1 > {1}".format(chia_binary, key_path), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            app.logger.error("{0}".format(errs.decode('utf-8')))
+            flash(_('Unable to save mnemonic to') + ' {0}'.format(key_path), 'danger')
+            return False
     except TimeoutExpired as ex:
         proc.kill()
         proc.communicate()
         app.logger.info(traceback.format_exc())
-        flash('Timed out while generating keys!', 'danger')
+        flash(_('Timed out while generating keys!'), 'danger')
         flash(str(ex), 'warning')
-        return False
-    if errs:
-        app.logger.info("{0}".format(errs.decode('utf-8')))
-        flash('Unable to save mnemonic to {0}'.format(key_path), 'danger')
         return False
     else:
         app.logger.info("Store mnemonic output: {0}".format(outs.decode('utf-8')))
         try:
             mnemonic_words = open(key_path,'r').read().split()
             if len(mnemonic_words) != 24:
-                flash('{0} does not contain a 24-word mnemonic!'.format(key_path), 'danger')
+                flash('{0} '.format(key_path) + _('does not contain a 24-word mnemonic!'), 'danger')
                 return False
         except:
-                flash('{0} was unreadable or not found.'.format(key_path), 'danger')
+                flash('{0} '.format(key_path) + _('was unreadable or not found.'), 'danger')
                 return False
-        flash('Welcome! A new key has been generated, see below. Please visit the ' + \
-        '<a href="https://github.com/guydavis/machinaris/wiki#basic-configuration" target="_blank">Wiki</a> to get started with Machinaris. ' \
-        'Please allow 5-10 minutes for Chia to begin syncing with peers...', 'success')
+        flash(_('Welcome! A new key has been generated, see below. Please visit the %(link_open)sWiki%(link_close)s to get started with Machinaris. Please allow 15 minutes for Chia to begin syncing with peers.', 
+            link_open='<a href="https://github.com/guydavis/machinaris/wiki#basic-configuration" target="_blank">', link_close='</a>'), 'success')
         flash('{0}'.format(" ".join(mnemonic_words)), 'info')
     if os.environ['mode'].startswith('farmer'):
         cmd = 'farmer-only'
@@ -230,46 +237,46 @@ def generate_key(key_path, blockchain):
     proc = Popen("{0} start {1}".format(chia_binary, cmd), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            app.logger.error("{0}".format(errs.decode('utf-8')))
+            flash(_('Unable to start farmer. Try restarting the Machinaris container.'), 'danger')
+            return False
     except TimeoutExpired as ex:
         proc.kill()
         proc.communicate()
         app.logger.info(traceback.format_exc())
-        flash('Timed out while starting farmer! Try restarting the Machinaris container.', 'danger')
+        flash(_('Timed out while starting farmer! Try restarting the Machinaris container.'), 'danger')
         flash(str(ex), 'warning')
-        return False
-    if errs:
-        app.logger.info("{0}".format(errs.decode('utf-8')))
-        flash('Unable to start farmer. Try restarting the Machinaris container.'.format(key_path), 'danger')
         return False
     return True
 
 def import_key(key_path, mnemonic, blockchain):
     chia_binary = globals.get_blockchain_binary(blockchain)
     if len(mnemonic.strip().split()) != 24:
-        flash('Did not receive a 24-word mnemonic seed phrase!', 'danger')
+        flash(_('Did not receive a 24-word mnemonic seed phrase!'), 'danger')
         return False
     if os.path.exists(key_path) and os.stat(key_path).st_size > 0:
         app.logger.info('Skipping key import as file exists and is NOT empty! {0}'.format(key_path))
-        flash('Skipping key import as file exists and is NOT empty!', 'danger')
-        flash('In container path: {0}'.format(key_path), 'warning')
+        flash(_('Skipping key import as file exists and is NOT empty!'), 'danger')
+        flash(_('In container path:') + ' {0}'.format(key_path), 'warning')
         return False
     with open(key_path, 'w') as keyfile:
         keyfile.write('{0}\n'.format(mnemonic))
     time.sleep(3)
-    proc = Popen("{0} keys add -f {1}".format(chia_binary, key_path), stdout=PIPE, stderr=PIPE, shell=True)
+    proc = Popen("{0} keys add --label key_0 -f {1}".format(chia_binary, key_path), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            app.logger.error("{0}".format(errs.decode('utf-8')))
+            flash(_('Unable to import provided mnemonic seed phrase!'), 'danger')
+            flash(errs.decode('utf-8'), 'warning')
+            return False
     except TimeoutExpired as ex:
         proc.kill()
         proc.communicate()
         app.logger.info(traceback.format_exc())
-        flash('Timed out while adding key!', 'danger')
+        flash(_('Timed out while adding key!'), 'danger')
         flash(str(ex), 'warning')
-        return False
-    if errs:
-        app.logger.info("{0}".format(errs.decode('utf-8')))
-        flash('Unable to import provided mnemonic seed phrase!', 'danger')
-        flash(errs.decode('utf-8'), 'warning')
         return False
     if outs:
         app.logger.debug(outs.decode('utf-8'))
@@ -280,45 +287,50 @@ def import_key(key_path, mnemonic, blockchain):
     proc = Popen("{0} start {1} -r".format(chia_binary, cmd), stdout=PIPE, stderr=PIPE, shell=True)
     try:
         outs, errs = proc.communicate(timeout=90)
+        if errs:
+            app.logger.error("{0}".format(errs.decode('utf-8')))
+            flash(_('Unable to start farmer. Try restarting the Machinaris container.'), 'danger')
+            return False
     except TimeoutExpired as ex:
         proc.kill()
         proc.communicate()
         app.logger.info(traceback.format_exc())
-        flash('Timed out while starting farmer! Try restarting the Machinaris container.', 'danger')
+        flash(_('Timed out while starting farmer! Try restarting the Machinaris container.'), 'danger')
         flash(str(ex), 'warning')
-        return False
-    if errs:
-        app.logger.info("{0}".format(errs.decode('utf-8')))
-        flash('Unable to start farmer. Try restarting the Machinaris container.'.format(key_path), 'danger')
         return False
     if outs:
         app.logger.debug(outs.decode('utf-8'))
-    flash('Welcome! Your mnemonic key was imported. See the ' + \
-        '<a href="https://github.com/guydavis/machinaris/wiki#basic-configuration" target="_blank">Wiki</a> to get started with Machinaris. ' \
-        'Please allow 5-10 minutes for Chia to begin syncing with peers...', 'success')
+    flash(_('Welcome! Your mnemonic key was imported. Please visit the %(link_open)sWiki%(link_close)s to get started with Machinaris. Please allow 15 minutes for Chia to begin syncing with peers.', 
+            link_open='<a href="https://github.com/guydavis/machinaris/wiki#basic-configuration" target="_blank">', link_close='</a>'), 'success')
     return True
 
-def add_connection(connection, hostname, blockchain):
+def add_connections(connections, hostname, blockchain):
+    farmer = wk.get_worker(hostname, blockchain)
     try:
-        host,port = connection.split(':')
-        if socket.gethostbyname(host) == host:
-            app.logger.info('{} is a valid IP address'.format(host))
-        elif socket.gethostbyname(host) != host:
-            app.logger.info('{} is a valid host'.format(hostname))
-        farmer = wk.get_worker(hostname, blockchain)
-        utils.send_post(farmer, "/actions/", \
-            { 'service': 'networking', 'action': 'add_connection', 'blockchain': blockchain, 'connection': connection}, \
-            debug=False).content
+        for connection in connections:
+            host,port = connection.split(':')
+            if socket.gethostbyname(host) == host:
+                app.logger.info('{} is a valid IP address'.format(host))
+            elif socket.gethostbyname(host) != host:
+                app.logger.info('{} is a valid host'.format(hostname))
     except requests.exceptions.RequestException as e:
         app.logger.info(traceback.format_exc())
-        flash('Failed to connect to worker to add connection. Please check logs.', 'danger')
+        flash(_('Failed to connect to worker to add connection. Please check logs.'), 'danger')
         flash(str(e), 'warning')
     except Exception as ex:
         app.logger.info(traceback.format_exc())
-        flash('Invalid connection "{0}" provided.  Must be HOST:PORT.'.format(connection), 'danger')
+        flash(_('Invalid connection "%(connection)s" provided. Must be HOST:PORT.', connection=connection), 'danger')
         flash(str(ex), 'warning')
+    try: # Send request, but timeout in only a second while API works in background
+        utils.send_post(farmer, "/actions/", \
+            { 'service': 'networking', 'action': 'add_connections', 'blockchain': blockchain, \
+            'connections': connections}, debug=False, timeout=1) 
+    except requests.exceptions.ReadTimeout: 
+        pass
+    if len(connections) == 1:
+        flash(_('Connection added to %(blockchain)s and sync engaging! Please wait a few minutes...', blockchain=blockchain.capitalize()), 'success')
     else:
-        flash('Connection added to {0} and sync engaging!'.format(blockchain), 'success')
+        flash(_('Node peers from AllTheBlocks added to %(blockchain)s and sync engaging! Please wait a few minutes...', blockchain=blockchain.capitalize()), 'success')
 
 def remove_connection(node_ids, hostname, blockchain):
     try:
@@ -328,14 +340,20 @@ def remove_connection(node_ids, hostname, blockchain):
             debug=False).content
     except requests.exceptions.RequestException as e:
         app.logger.info(traceback.format_exc())
-        flash('Failed to connect to worker to add connection. Please check logs.', 'danger')
+        flash(_('Failed to connect to worker to add connection. Please check logs.'), 'danger')
         flash(str(e), 'warning')
     except Exception as ex:
         app.logger.info(traceback.format_exc())
-        flash('Unknown error occurred attempting to remove connections. Please check logs.', 'danger')
+        flash(_('Unknown error occurred attempting to remove connections. Please check logs.'), 'danger')
         flash(str(ex), 'warning')
     else:
-        flash('Connection removed from {0}!'.format(blockchain), 'success')
+        flash(_('Connection removed from') + ' {0}!'.format(blockchain), 'success')
+
+def load_hot_wallet_addresses():
+    hot_addresses = {}
+    for key in load_keys().rows:
+        hot_addresses[key['blockchain']] = key['addresses']
+    return hot_addresses
 
 def load_cold_wallet_addresses():
     data = {}
@@ -344,7 +362,7 @@ def load_cold_wallet_addresses():
             with open(COLD_WALLET_ADDRESSES_FILE) as f:
                 data = json.load(f)
         except Exception as ex:
-            msg = "Unable to read addresses from {0} because {1}".format(COLD_WALLET_ADDRESSES_FILE, str(ex))
+            msg = _("Unable to read addresses from %(file)s because %(exception)s", file=COLD_WALLET_ADDRESSES_FILE, exception=str(ex))
             app.logger.error(msg)
             flash(msg, 'danger')
             return data
@@ -359,16 +377,108 @@ def save_cold_wallet_addresses(blockchain, cold_wallet_addresses):
     try:
         with open(COLD_WALLET_ADDRESSES_FILE, 'w') as f:
             json.dump(data, f)
-        flash(f'Successfully stored cold wallet addresses for {blockchain}. Please allow a few minutes for updated values to appear below.', 'success')
+        flash(_('Successfully stored cold wallet addresses for %(blockchain)s. Please allow a few minutes for updated values to appear below.', blockchain=blockchain), 'success')
     except Exception as ex:
-        msg = "Failed to store addresses in {0} because {1}".format(COLD_WALLET_ADDRESSES_FILE, str(ex))
+        msg = _("Unable to store addresses in %(file)s because %(exception)s", file=COLD_WALLET_ADDRESSES_FILE, exception=str(ex))
         app.logger.error(msg)
         flash(msg, 'danger')
         return
 
 def check(plot_id):
-    check_file = '/root/.chia/plotman/checks/{0}.log'.format(plot_id)
-    if os.path.exists(check_file):
+    check_file = '/root/.chia/plotman/checks/{0}.log'.format(plot_id[:8])
+    if os.path.exists(check_file) and os.path.getsize(check_file):
         with open(check_file, 'r+') as fp:
             return fp.read()
-    return make_response("Sorry, no plot check log found.  Please wait for scheduled plot check to run.", 200)
+    try:
+        thread = threading.Thread(target=plots_check.execute, 
+            kwargs={
+                'plot_id': plot_id
+            }
+        )
+        thread.start()
+    except Exception as ex:
+        app.logger.info(traceback.format_exc())
+    try: # Clear any stale status
+        plot = db.session.query(p.Plot).filter(p.Plot.plot_id == plot_id).first()
+        plot.plot_check = None
+        db.session.commit()
+    except Exception as ex:
+        app.logger.info(traceback.format_exc())
+    return _("Plot check initiated for ID: %(plot_id)s. Please refresh in a few minutes.\n\nNote that all plots will be checked slowly in the background so you\ndon't need to check each one individually.  Please be patient.", plot_id=plot_id)
+
+def get_transactions(lang, worker, blockchain, wallet_id):
+    try:
+        response = utils.send_get(worker, "/transactions/{0}".format(wallet_id), {}, debug=False, lang=lang)
+        if response.status_code == 200:
+            transactions = json.loads(response.content.decode('utf-8'))
+            return Transactions(blockchain, transactions)
+    except Exception as ex:
+        app.logger.info('Failed to load transactions from {0}:{1} running {2} because {3}'.format(
+                worker.hostname, worker.port, blockchain, str(ex)))
+    return None
+
+def load_wallet_ids(blockchain):
+    if globals.legacy_blockchain(blockchain):
+        return [{'id': '1', 'name': blockchain.capitalize() + ' ' + _('Wallet') }]
+    wallet_ids = []
+    wallet = db.session.query(w.Wallet).filter(w.Wallet.blockchain==blockchain).first()
+    wallet_name = None
+    for line in wallet.details.split('\n'):
+        if line.strip().endswith(':') and not line.strip() == 'Connections:':
+            wallet_name = line.strip()[:-1]
+        elif line.strip().startswith('-Wallet ID:'):
+            wallet_ids.append({'id': line.split(':')[1].strip(), 'name': wallet_name })
+    return wallet_ids
+
+def restart_farmer(hostname, blockchain):
+    farmer = wk.get_worker(hostname, blockchain)
+    try: # Send request, but timeout in only a second while API works in background
+        utils.send_post(farmer, "/actions/", \
+            { 'service': 'farming', 'action': 'restart', 'blockchain': blockchain, }, debug=False, timeout=1) 
+    except requests.exceptions.ReadTimeout: 
+        pass
+
+def start_or_pause_wallet(hostname, blockchain, action):
+    farmer = wk.get_worker(hostname, blockchain)
+    try: # Send request, but timeout in only a second while API works in background
+        utils.send_post(farmer, "/actions/", \
+            { 'service': 'wallet', 'action': action, 'blockchain': blockchain, }, debug=False, timeout=1) 
+    except requests.exceptions.ReadTimeout: 
+        pass
+
+def load_wallet_sync_frequencies():
+    return [
+        [-1, _('Always')], 
+        [1, _('Once an Hour')], 
+        [3, _('Every 3 Hours')],
+        [6, _('Every 6 Hours')],
+        [12, _('Every 12 Hours')],
+        [24, _('Once a Day')],
+        [0, _('Never')]
+    ]
+
+def load_current_wallet_sync_frequency():
+    wallet_sync_frequency = -1  # Always
+    if os.path.exists(WALLET_SETTINGS_FILE):
+        try:
+            with open(WALLET_SETTINGS_FILE) as f:
+                data = json.load(f)
+                if 'wallet_sync_frequency' in data:
+                    wallet_sync_frequency = data['wallet_sync_frequency']
+        except Exception as ex:
+            msg = "Unable to read wallet settings from {0} because {1}".format(WALLET_SETTINGS_FILE, str(ex))
+            app.logger.error(msg)
+    return wallet_sync_frequency
+
+def save_current_wallet_sync_frequency(freq):
+    settings = {} # An "always" (-1) frequency is an empty settings dict to fullnodes
+    if int(freq) >= 0:  # 0 is Never, other is hours of frequency
+        settings = {'wallet_sync_frequency': freq}
+    fullnodes = wk.get_fullnodes_by_blockchain()
+    for blockchain in fullnodes.keys():
+        fullnode = fullnodes[blockchain]
+        app.logger.debug("For {0}, attempting to save wallet sync setting to {1}".format(blockchain, fullnode.url))
+        try:
+            utils.send_put(fullnode, '/configs/wallet/{0}'.format(blockchain), payload=settings, debug=False, timeout=5)
+        except Exception as ex:
+            app.logger.debug("Failed to send updated wallet sync frequency for {0} due to {1}.".format(blockchain, str(ex)))

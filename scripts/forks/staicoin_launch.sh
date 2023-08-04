@@ -14,9 +14,6 @@ ln -s /root/.chia/staicoin /root/.staicoin
 rm -f /root/.stai
 ln -s /root/.chia/staicoin /root/.stai
 
-mkdir -p /root/.stai/mainnet/log
-stai init >> /root/.stai/mainnet/log/init.log 2>&1 
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.stai/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
@@ -26,10 +23,13 @@ if [[ "${blockchain_db_download}" == 'true' ]] \
   mkdir -p /root/.stai/mainnet/db/ && cd /root/.stai/mainnet/db/
   # Latest Blockchain DB download from direct from https://stai.global
   curl -skJLO https://stai.global/database/staiblockchain.rar
-  unrar staiblockchain.rar 
+  unrar e staiblockchain.rar 
   mv staiblockchain/*.sqlite .
   rm -rf staiblockchain/ staiblockchain.rar
 fi
+
+mkdir -p /root/.stai/mainnet/log
+stai init >> /root/.stai/mainnet/log/init.log 2>&1 
 
 echo 'Configuring Staicoin...'
 if [ -f /root/.stai/mainnet/config/config.yaml ]; then
@@ -63,7 +63,7 @@ chmod 755 -R /root/.stai/mainnet/config/ssl/ &> /dev/null
 stai init --fix-ssl-permissions > /dev/null 
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -74,7 +74,20 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  stai start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    stai start farmer-no-wallet
+  else
+    stai start farmer
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    stai start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.stai/mainnet/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
@@ -92,7 +105,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.stai/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8934/certificates/?type=stai.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8934/certificates/?type=stai.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -105,8 +118,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
     echo "Configuring farmer peer at ${farmer_address}:${farmer_port}"
-    stai configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    stai configure --enable-upnp false
+    stai configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.stai/mainnet/log/init.log
+    stai configure --enable-upnp false  2>&1 >> /root/.stai/mainnet/log/init.log
     stai start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

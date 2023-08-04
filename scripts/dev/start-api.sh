@@ -8,7 +8,7 @@ echo 'Starting Machinaris...'
 mkdir -p /root/.chia/machinaris/logs
 cd /code/machinaris
 
-if [ $FLASK_ENV == "development" ];
+if [ -n $FLASK_DEBUG ];
 then
     LOG_LEVEL='debug'
     RELOAD='--reload'
@@ -28,6 +28,5 @@ fi
     --workers=1 \
     --threads=12 \
     --config api/gunicorn.conf.py \
-    --error-logfile - \
-    --access-logfile - \
+    --log-config scripts/dev/api_log.conf \
     api:app

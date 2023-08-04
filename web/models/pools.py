@@ -6,6 +6,7 @@ import traceback
 
 import datetime
 
+from flask_babel import _, lazy_gettext as _l
 from common.models.plotnfts import Plotnft
 from web import app, db
 from web.actions import worker as w
@@ -16,6 +17,8 @@ class Plotnfts:
         self.columns = ['hostname', 'details', 'updated_at']
         self.rows = []
         for plotnft in plotnfts:
+            if plotnft.blockchain == 'gigahorse':
+                continue  # Ignore these, use Chia instead.
             try:
                 app.logger.debug("Found worker with hostname '{0}'".format(plotnft.hostname))
                 displayname = w.get_worker(plotnft.hostname).displayname
@@ -49,6 +52,8 @@ class Pools:
     def __init__(self, pools, plotnfts):
         self.blockchains = {}
         for pool in pools:
+            if pool.blockchain == 'gigahorse':
+                continue  # Ignore these, use Chia instead.
             try:
                 app.logger.debug("Found worker with hostname '{0}'".format(pool.hostname))
                 displayname = w.get_worker(pool.hostname, pool.blockchain).displayname
@@ -71,6 +76,7 @@ class Pools:
                     points_successful_last_24h = "0"
                 else:
                     points_successful_last_24h = "%.2f"% ( (points_found_24h - pool_errors_24h) / points_found_24h * 100)
+            errors = self.extract_unique_errors(pool_state)
             pool_obj = { 
                 'displayname': displayname, 
                 'hostname': pool.hostname,
@@ -81,7 +87,8 @@ class Pools:
                 'pool_state': pool_state,
                 'updated_at': pool.updated_at,
                 'status': status,
-                'points_successful_last_24h': points_successful_last_24h
+                'errors': errors,
+                'points_successful_last_24h': points_successful_last_24h,
             }
             if pool.blockchain in self.blockchains:
                 blockchain_pools = self.blockchains[pool.blockchain]
@@ -101,9 +108,18 @@ class Pools:
             if line.startswith(key):
                 return line[line.index(':')+1:].strip()
         return None
+    
+    def extract_unique_errors(self, pool_state):
+        errors = []
+        if 'pool_errors_24h' in pool_state:
+            for error in pool_state['pool_errors_24h']:
+                if not error['error_message'] in errors:
+                    errors.append(error['error_message'])
+        return errors
 
 class PartialsChartData:
-
+    
+    # select count(*), substr(created_at, 0,14) as hr from partials where blockchain = 'chia' group by hr order by hr;
     def __init__(self, partials):
         self.labels = []
         label_index_by_hour = {}
@@ -153,7 +169,11 @@ class PoolConfigs():
         warnings = []
         for wallet in wallets:
             if not wallet.is_synced():
-                warnings.append("{0} wallet ({1}) is not fully synced yet.  Please allow wallet time to complete syncing before changing Pooling settings.".format(blockchain.capitalize(), wallet.wallet_id()))
+                warnings.append(_("%(blockchain)s wallet (%(wallet_id)s) is not fully synced yet.  Please allow wallet time to complete syncing before changing Pooling settings.", 
+                    blockchain=blockchain.capitalize(), wallet_id=wallet.wallet_id()))
             if not wallet.has_few_mojos():
-                warnings.append("{0} wallet ({1}) has a zero balance.  Please request some mojos from a <a href='{2}' target='_blank'>faucet</a>, then try again later.".format(blockchain.capitalize(), wallet.wallet_id(), self.links['get_mojos']))
+                warnings.append(_("%(blockchain)s wallet (%(wallet_id)s) has a zero balance.  Please request some mojos from a %(link_open)sfaucet%(link_close)s for the first wallet address on the Keys page, then try again later.",
+                    blockchain=blockchain.capitalize(), wallet_id=wallet.wallet_id(), 
+                    link_open="<a class='text-white' href='{0}' target='_blank'>".format(self.links['get_mojos']), 
+                    link_close="</a>"))
         return warnings

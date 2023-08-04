@@ -12,9 +12,6 @@ mkdir -p /root/.chia/stor
 rm -f /root/.stor
 ln -s /root/.chia/stor /root/.stor 
 
-mkdir -p /root/.stor/mainnet/log
-stor init >> /root/.stor/mainnet/log/init.log 2>&1 
-
 if [[ "${blockchain_db_download}" == 'true' ]] \
   && [[ "${mode}" == 'fullnode' ]] \
   && [[ ! -f /root/.stor/mainnet/db/blockchain_v1_mainnet.sqlite ]] \
@@ -26,9 +23,12 @@ if [[ "${blockchain_db_download}" == 'true' ]] \
   db_file=$(curl -s https://eu.stornode.net/ | grep -Po 'db-(\d){4}-(\d){2}-(\d){2}'.zip | tail -n 1)
   curl -skJLO https://eu.stornode.net/${db_file}
   unzip db*.zip 
-  mv db*/*sqlite .
-  rm -rf db*
+  mv root/.stor/mainnet/db/*sqlite .
+  rm -rf db*.zip root
 fi
+
+mkdir -p /root/.stor/mainnet/log
+stor init >> /root/.stor/mainnet/log/init.log 2>&1 
 
 echo 'Configuring Stor...'
 if [ -f /root/.stor/mainnet/config/config.yaml ]; then
@@ -59,7 +59,7 @@ chmod 755 -R /root/.stor/mainnet/config/ssl/ &> /dev/null
 stor init --fix-ssl-permissions > /dev/null 
 
 # Start services based on mode selected. Default is 'fullnode'
-if [[ ${mode} == 'fullnode' ]]; then
+if [[ ${mode} =~ ^fullnode.* ]]; then
   for k in ${keys//:/ }; do
     while [[ "${k}" != "persistent" ]] && [[ ! -s ${k} ]]; do
       echo 'Waiting for key to be created/imported into mnemonic.txt. See: http://localhost:8926'
@@ -70,7 +70,20 @@ if [[ ${mode} == 'fullnode' ]]; then
       fi
     done
   done
-  stor start farmer
+  if [ -f /root/.chia/machinaris/config/wallet_settings.json ]; then
+    stor start farmer-no-wallet
+  else
+    stor start farmer
+  fi
+  if [[ ${mode} =~ .*timelord$ ]]; then
+    if [ ! -f vdf_bench ]; then
+        echo "Building timelord binaries..."
+        apt-get update > /tmp/timelord_build.sh 2>&1 
+        apt-get install -y libgmp-dev libboost-python-dev libboost-system-dev >> /tmp/timelord_build.sh 2>&1 
+        BUILD_VDF_CLIENT=Y BUILD_VDF_BENCH=Y /usr/bin/sh ./install-timelord.sh >> /tmp/timelord_build.sh 2>&1 
+    fi
+    stor start timelord-only
+  fi
 elif [[ ${mode} =~ ^farmer.* ]]; then
   if [ ! -f ~/.stor/mainnet/config/ssl/wallet/public_wallet.key ]; then
     echo "No wallet key found, so not starting farming services.  Please add your Chia mnemonic.txt to the ~/.machinaris/ folder and restart."
@@ -88,7 +101,7 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       if [ $response == '200' ]; then
         unzip /tmp/certs.zip -d /root/.stor/farmer_ca
       else
-        echo "Certificates response of ${response} from http://${farmer_address}:8935/certificates/?type=stor.  Try clicking 'New Worker' button on 'Workers' page first."
+        echo "Certificates response of ${response} from http://${farmer_address}:8935/certificates/?type=stor.  Is the fork's fullnode container running?"
       fi
       rm -f /tmp/certs.zip 
     fi
@@ -100,8 +113,8 @@ elif [[ ${mode} =~ ^harvester.* ]]; then
       echo "Did not find your farmer's certificates within /root/.stor/farmer_ca."
       echo "See: https://github.com/guydavis/machinaris/wiki/Workers#harvester"
     fi
-    stor configure --set-farmer-peer ${farmer_address}:${farmer_port}
-    stor configure --enable-upnp false
+    stor configure --set-farmer-peer ${farmer_address}:${farmer_port}  2>&1 >> /root/.stor/mainnet/log/init.log
+    stor configure --enable-upnp false  2>&1 >> /root/.stor/mainnet/log/init.log
     stor start harvester -r
   fi
 elif [[ ${mode} == 'plotter' ]]; then

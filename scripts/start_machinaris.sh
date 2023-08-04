@@ -11,6 +11,9 @@ if [[ "${blockchains}" == 'chives' ]]; then
 elif [[ "${blockchains}" == 'mmx' ]]; then
     cp -f /machinaris/config/plotman.sample-mmx.yaml /root/.chia/plotman/plotman.sample.yaml
     cp -n /machinaris/config/plotman.sample-mmx.yaml /root/.chia/plotman/plotman.yaml
+elif [[ "${blockchains}" == 'gigahorse' ]]; then
+    cp -f /machinaris/config/plotman.sample-gigahorse.yaml /root/.chia/plotman/plotman.sample.yaml
+    cp -n /machinaris/config/plotman.sample-gigahorse.yaml /root/.chia/plotman/plotman.yaml
 else # If Chia
     cp -f /machinaris/config/plotman.sample.yaml /root/.chia/plotman/plotman.sample.yaml
     cp -n /machinaris/config/plotman.sample.yaml /root/.chia/plotman/plotman.yaml
@@ -26,7 +29,7 @@ else # If Chia
 fi
 # Import ssh key if exists
 if [ -f "/id_rsa" ]; then
-    echo "/id_rsa exists, trying to import private ssh key"
+    echo "Importing SSH key at /id_rsa volume mount."
     mkdir -p ~/.ssh/
     cp -f /id_rsa ~/.ssh/id_rsa
     cat > ~/.ssh/config <<'_EOF'
@@ -43,7 +46,7 @@ fi
 mkdir -p /root/.chia/machinaris/config
 mkdir -p /root/.chia/machinaris/logs
 cd /machinaris
-if [ $FLASK_ENV == "development" ];
+if [ -n $FLASK_DEBUG ];
 then
     LOG_LEVEL='debug'
     RELOAD='--reload'
@@ -77,7 +80,8 @@ echo 'Starting Machinaris Web server...'
 /chia-blockchain/venv/bin/gunicorn ${RELOAD} \
     --bind 0.0.0.0:8926 --timeout 90 \
     --log-level=${LOG_LEVEL} \
-    --workers=2 \
+    --workers=1 \
+    --threads=12 \
     --log-config web/log.conf \
     web:app &
 

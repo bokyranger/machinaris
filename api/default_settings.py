@@ -1,4 +1,5 @@
 import os
+import traceback
 
 class DefaultConfig:
     API_TITLE = "Machinaris API"
@@ -25,7 +26,9 @@ class DefaultConfig:
         'plottings':        'sqlite:////root/.chia/machinaris/dbs/plottings.db',
         'plots':            'sqlite:////root/.chia/machinaris/dbs/plots.db',
         'pools':            'sqlite:////root/.chia/machinaris/dbs/pools.db',
+        'transfers':        'sqlite:////root/.chia/machinaris/dbs/transfers.db',
         'wallets':          'sqlite:////root/.chia/machinaris/dbs/wallets.db',
+        'warnings':         'sqlite:////root/.chia/machinaris/dbs/warnings.db',
         'workers':          'sqlite:////root/.chia/machinaris/dbs/workers.db',
 
         'stat_plot_count':          'sqlite:////root/.chia/machinaris/dbs/stat_plot_count.db',
@@ -33,14 +36,20 @@ class DefaultConfig:
         'stat_total_coins':         'sqlite:////root/.chia/machinaris/dbs/stat_total_coins.db',
         'stat_netspace_size':       'sqlite:////root/.chia/machinaris/dbs/stat_netspace_size.db',
         'stat_time_to_win':         'sqlite:////root/.chia/machinaris/dbs/stat_time_to_win.db',
+        'stat_effort':              'sqlite:////root/.chia/machinaris/dbs/stat_effort.db',
         'stat_plots_total_used':    'sqlite:////root/.chia/machinaris/dbs/stat_plots_total_used.db',
         'stat_plots_disk_used':     'sqlite:////root/.chia/machinaris/dbs/stat_plots_disk_used.db',
         'stat_plots_disk_free':     'sqlite:////root/.chia/machinaris/dbs/stat_plots_disk_free.db',
         'stat_plotting_total_used': 'sqlite:////root/.chia/machinaris/dbs/stat_plotting_total_used.db',
         'stat_plotting_disk_used':  'sqlite:////root/.chia/machinaris/dbs/stat_plotting_disk_used.db',
         'stat_plotting_disk_free':  'sqlite:////root/.chia/machinaris/dbs/stat_plotting_disk_free.db',
+        'stat_farmed_blocks':       'sqlite:////root/.chia/machinaris/dbs/stat_farmed_blocks.db',
+        'stat_wallet_balances':     'sqlite:////root/.chia/machinaris/dbs/stat_wallet_balances.db',
+        'stat_total_balance':       'sqlite:////root/.chia/machinaris/dbs/stat_total_balance.db',
+        'stat_container_mem_gib':   'sqlite:////root/.chia/machinaris/dbs/stat_container_mem_gib.db',
+        'stat_host_mem_pct':        'sqlite:////root/.chia/machinaris/dbs/stat_host_mem_pct.db',
     }
-    SQLALCHEMY_ECHO = True if 'FLASK_ENV' in os.environ and os.environ['FLASK_ENV'] == "development" else False
+    SQLALCHEMY_ECHO = True if 'FLASK_DEBUG' in os.environ and os.environ['FLASK_DEBUG'] == "development" else False
     ETAG_DISABLED = True # https://flask-smorest.readthedocs.io/en/latest/etag.html
     CONTROLLER_SCHEME = 'http'
     CONTROLLER_HOST = os.environ['controller_host'] if 'controller_host' in os.environ else 'localhost'
@@ -50,6 +59,15 @@ class DefaultConfig:
 
     STATUS_EVERY_X_MINUTES = 2  # Run status collection once every two minutes by default
     ALLOW_HARVESTER_CERT_LAN_DOWNLOAD = True
+    SELECTED_WALLET_NUM = 1 # Default is read first wallet if multiple are prompted by `chia wallet show`
+    RESTART_FARMER_IF_CONTAINER_MEMORY_EXCEEDS_GB = -1 # Default is to allow a fullnode unlimited memory
 
     BABEL_TRANSLATION_DIRECTORIES = "api/translations"
     LANGUAGES = ['en', 'de_DE', 'fr_FR', 'it_IT', 'nl_NL', 'pt_PT', 'zh']
+
+    # For latest APScheduler library, pass the TZ through
+    try:
+        SCHEDULER_TIMEZONE = os.environ['TZ']
+    except:
+        print("Found no TZ environment variable containing timezone.  Generate a working Machinaris launch at https://www.machinaris.app")
+        traceback.print_exc()

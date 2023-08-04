@@ -25,44 +25,91 @@ def load_smartctl_overrides():
             msg = "Unable to read smartctl overrides from {0} because {1}".format(SMARTCTL_OVERRIDES_CONFIG, str(ex))
             app.logger.error(msg)
             return data
+    if len(data.keys()) > 0:
+        app.logger.info("{0} contains: ".format(SMARTCTL_OVERRIDES_CONFIG))
+        app.logger.info(data)
+    for drive in data.keys():
+        if 'device_type' in data[drive]:
+            data[drive]['type_overridden'] = True
+        if not 'comment' in data[drive]:
+            data[drive]['comment'] = None
     return data
 
 def load_drives_status():
     with app.app_context():
         proc = Popen("smartctl --scan", stdout=PIPE, stderr=PIPE, shell=True)
         try:
-            outs, errs = proc.communicate(timeout=90)
+            outs, errs = proc.communicate(timeout=30)
+            if errs:
+                app.logger.info("Error from smartctl scan because {0}".format(outs.decode('utf-8')))
         except TimeoutExpired:
             proc.kill()
             proc.communicate()
-            abort(500, description="The timeout is expired!")
-        if errs:
-            app.logger.info("Error from smartctl scan because {0}".format(outs.decode('utf-8')))
-        overrides = load_smartctl_overrides()
-        devices = []
+            raise Exception("The timeout for smartctl scan expired!")
+        devices = load_smartctl_overrides()
+        # Now add devices from the scan only if 
         for line in outs.decode('utf-8').splitlines():
-            pieces = line.split()
-            device = pieces[0]
-            info = load_drive_info(device, overrides)
-            devices.append(drives.DriveStatus(line, info))
-        return devices
+            # First parse the single device line from smartctl --scan
+            # Example "/dev/sda -d sat # /dev/sda [SAT], ATA device"
+            values = line.split('#')
+            comment = values[1].strip()
+            values = values[0].split('-d')
+            device = values[0].strip()
+            device_type = values[1].strip()
+            if not device in devices:  # Add any devices from the scan, not in overrides
+                devices[device] = {}
+            if not 'device_type' in  devices[device]: # User added override device to list, but accepts default type
+                devices[device]['device_type'] = device_type
+            devices[device]['comment'] = comment
+        drive_results = []
+        for device in devices.keys():
+            info = load_drive_info(device, devices[device])
+            if info and not "No such device" in info:
+                #app.logger.info("Smartctl info parsed and device added: {0}".format(device))
+                drive_results.append(drives.DriveStatus(device, devices[device]['device_type'],
+                    devices[device]['comment'], info))
+            else:
+                app.logger.info("Smartctl reports no useful info for {0}".format(device))
+        return drive_results
 
-def load_drive_info(device, overrides):
-    if device in overrides and 'device_type' in overrides[device]:
-        cmd = "smartctl -a -d {0} {1}".format(overrides[device]['device_type'], device)
+def load_drive_info(device_name, device_settings):
+    #app.logger.info("{0} -> {1}".format(device_name, device_settings))
+    if 'type_overridden' in device_settings:
+        cmd = "smartctl -a -n standby -d {0} {1}".format(device_settings['device_type'], device_name)
     else: # No override, use the default auto mode
-        cmd = "smartctl -a {0}".format(device)
-    app.logger.info(cmd)
+        cmd = "smartctl -a -n standby {0}".format(device_name)
+    app.logger.info("Executing: {0}".format(cmd))
     proc = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
     try:
-        outs, errs = proc.communicate(timeout=90)
+        outs, errs = proc.communicate(timeout=10)
+        if errs:
+            app.logger.error("Error from {0} because {1}".format(cmd, outs.decode('utf-8')))
+            return None
     except TimeoutExpired:
         proc.kill()
         proc.communicate()
         app.logger.info("Error from {0} because timeout expired".format(cmd))
         return None
-    if errs:
-        app.logger.debug("Error from {0} because {1}".format(cmd, outs.decode('utf-8')))
+    # Handle Smartctl response code bits.  See 'Return Values' at https://linux.die.net/man/8/smartctl
+    if (proc.returncode & (1<<0)):
+        app.logger.info("Failed commandline parse of {0}".format(cmd))
+        return None
+    if (proc.returncode & (1<<1)):
+        app.logger.info("Device open failed, device did not return an IDENTIFY DEVICE structure, or device is in a low-power mode. {0}".format(cmd))
+        return None
+    if (proc.returncode & (1<<2)):
+        app.logger.info("Some SMART or other ATA command to the disk failed, or there was a checksum error in a SMART data structure. {0}".format(cmd))
+        return None
+    if (proc.returncode & (1<<3)):
+        app.logger.info("SMART status check returned DISK FAILING")
+    if (proc.returncode & (1<<4)):
+        app.logger.info("Smartctl found prefail Attributes <= threshold.")
+    if (proc.returncode & (1<<5)):
+        app.logger.debug("SMART status check returned DISK OK but we found that some (usage or prefail) Attributes have been <= threshold at some time in the past.")
+    if (proc.returncode & (1<<6)):
+        app.logger.debug("The device error log contains records of errors.")
+    if (proc.returncode & (1<<7)):
+        app.logger.debug("The device self-test log contains records of errors. [ATA only] Failed self-tests outdated by a newer successful extended self-test are ignored.")
     return outs.decode('utf-8')
 
 # If enhanced Chiadog is running within container, then its listening on http://localhost:8925

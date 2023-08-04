@@ -54,7 +54,6 @@ class Host:
                 status = worker['monitoring_status']
         return status
 
-
 class WorkerSummary:
 
     def __init__(self, workers):
@@ -87,8 +86,6 @@ class WorkerSummary:
                 other_versions += blockchain.capitalize() + ": " + config['blockchain_version'] + "<br/>"
         if 'chiadog_version' in config and config['chiadog_version']:
             other_versions += "Chiadog: " + config['chiadog_version'] + "<br/>"
-        if 'farmr_version' in config and config['farmr_version']:
-            other_versions += "Farmr: " + config['farmr_version'] + "<br/>"
         if 'madmax_version' in config and config['madmax_version']:
             other_versions += "Madmax: " + config['madmax_version'] + "<br/>"
         if 'plotman_version' in config and config['plotman_version']:
@@ -98,8 +95,6 @@ class WorkerSummary:
             worker.time_on_worker = config['now']
         else:
             worker.time_on_worker = '?'
-        if 'farmr_device_id' in config and config['farmr_device_id']:
-            worker.farmr_device_id = config['farmr_device_id']
         if not worker.port:  # Old records
             worker.port = 8927
 
@@ -109,13 +104,13 @@ class WorkerSummary:
     def status_if_responding(self, displayname, blockchain, connection_status, last_status):
         if connection_status == "Responding":
             return last_status
-        app.logger.info("Oops! {0} ({1}) last connection status: {2}".format(displayname, blockchain, connection_status))
+        #app.logger.info("Oops! {0} ({1}) last connection status: {2}".format(displayname, blockchain, connection_status))
         return "offline"
 
     def fullnodes(self):
         filtered = []
         for worker in self.workers:
-            if worker.mode == "fullnode":
+            if "fullnode" in worker.mode:
                 host = None
                 for h in filtered:
                     if h.displayname == worker.displayname:
@@ -134,7 +129,7 @@ class WorkerSummary:
     def plotters(self):
         filtered = []
         for worker in self.workers:
-            if (worker.mode == "fullnode" or "plotter" in worker.mode) and worker.blockchain in pl.PLOTTABLE_BLOCKCHAINS:
+            if ("fullnode" in worker.mode or "plotter" in worker.mode) and worker.blockchain in pl.PLOTTABLE_BLOCKCHAINS:
                 host = None
                 for h in filtered:
                     if h.displayname == worker.displayname:
@@ -160,7 +155,7 @@ class WorkerSummary:
     def farmers(self):
         filtered = []
         for worker in self.workers:
-            if worker.mode == "fullnode" or "farmer" in worker.mode:
+            if "fullnode" in worker.mode or "farmer" in worker.mode:
                 host = None
                 for h in filtered:
                     if h.displayname == worker.displayname:
@@ -183,7 +178,7 @@ class WorkerSummary:
     def harvesters(self):
         filtered = []
         for worker in self.workers:
-            if worker.mode == "fullnode" or "harvester" in worker.mode:
+            if "fullnode" in worker.mode or "harvester" in worker.mode:
                 host = None
                 for h in filtered:
                     if h.displayname == worker.displayname:
@@ -206,7 +201,7 @@ class WorkerSummary:
     def farmers_harvesters(self, exclude_blockchains=None):
         filtered = []
         for worker in self.workers:
-            if worker.mode == "fullnode" or "farmer" in worker.mode or "harvester" in worker.mode:
+            if "fullnode" in worker.mode or "farmer" in worker.mode or "harvester" in worker.mode:
                 if exclude_blockchains and worker.blockchain in exclude_blockchains:
                     continue
                 host = None

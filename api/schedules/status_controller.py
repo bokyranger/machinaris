@@ -28,9 +28,8 @@ def update():
             workers = db.session.query(w.Worker).order_by(w.Worker.hostname).all()
             ping_workers(workers)
             db.session.commit()
-        except:
-            app.logger.info(traceback.format_exc())
-            app.logger.info("Failed to load and send worker status.")
+        except Exception as ex:
+            app.logger.info("Failed to load and send worker's connection status because {0}".format(str(ex)))
 
 def ping_workers(workers):
     for worker in workers:
@@ -41,11 +40,11 @@ def ping_workers(workers):
             worker.updated_at = datetime.datetime.now()
             worker.ping_success_at = datetime.datetime.now()
         except requests.exceptions.ConnectTimeout as ex:
-            app.logger.info(str(ex))
+            app.logger.info('Received connection timeout from {0}'.format(worker.url + '/ping'))
             worker.latest_ping_result = "Connection Timeout"
         except requests.exceptions.ConnectionError as ex:
-            app.logger.info(str(ex))
+            app.logger.info('Received connection refused from {0}'.format(worker.url + '/ping'))
             worker.latest_ping_result = "Connection Refused"
         except Exception as ex:
-            app.logger.info(str(ex))
+            app.logger.info('Received general error from {0}'.format(worker.url + '/ping'))
             worker.latest_ping_result = "Connection Error"

@@ -24,7 +24,7 @@
         &nbsp;
         <a href="https://github.com/guydavis/machinaris/wiki/Wallets" target="_blank"><i class="fs-4 bi-question-circle"></i></a>
     </div>
-    </div>
+</div>
 <style>
     a.active.nav-link {
         background-color: #3d3f42 !important
@@ -33,7 +33,7 @@
     button.active.nav-link {
         background-color: #3d3f42 !important
     }
-    td.edit_cell {
+    td.icon_cell {
         text-align: center;
         padding:0px 5px 0px 0px;
     }
@@ -58,6 +58,15 @@
                     {% endif %}
                 {% endfor %}
               </select>
+              <div class="mb-3">
+                <label for="sync_wallet_frequency" class="col-form-label">{{_('Sync Wallets:')}}</label>
+                <select type="text" class="form-control" id="sync_wallet_frequency_field" name="sync_wallet_frequency">
+                  {% for frequency in sync_wallet_frequencies %}
+                      <option {% if frequency[0]|string() == sync_wallet_frequency|string() %} selected {% endif %}
+                          value="{{frequency[0]}}">{{frequency[1]}}</option>
+                  {% endfor %}
+                </select>
+              </div>
             </div>
           </form>
         </div>
@@ -89,16 +98,79 @@
           </form>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" id="btnCancel" data-bs-dismiss="modal">{{_('Cancel')}}</button>
+          <button type="button" class="btn btn-secondary" id="btnCancelWallet" data-bs-dismiss="modal">{{_('Cancel')}}</button>
           <button type="button" class="btn btn-outline-success" id="btnSave">{{_('Save')}}</button>
         </div>
       </div>
     </div>
   </div>
 
+  <div class="modal fade" id="restartModal" tabindex="-1" aria-labelledby="restartModalLabel" aria-hidden="true">
+    <div class="modal-dialog bg-dark rounded-3 modal-lg">
+        <div class="modal-content bg-dark">
+            <div class="modal-header bg-dark">
+                <h5 class="modal-title" id="restartModalLabel"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form method="POST" id="restart-form">
+                <input type="hidden" id="hostname_field" name="hostname" value="" />
+                <input type="hidden" id="wallet_blockchain_field" name="blockchain" value="" />
+                <input type="hidden" id="action_field" name="action" value="" />
+                <p id="restartModalMessage"></p>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" id="btnCancel" data-bs-dismiss="modal">{{_('Cancel')}}</button>
+              <button type="button" class="btn btn-outline-success" id="btnRestart"></button>
+            </div>
+        </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="rewardsModal" data-bs-backdrop="static" tabindex="-1" aria-labelledby="rewardsModalLabel" aria-hidden="true">
+    <div class="modal-dialog bg-dark rounded-3">
+        <div class="modal-content bg-dark">
+          <form method="POST" id="rewards-form">
+            <input type="hidden" name="action" value="recover"/>
+            <div class="modal-header bg-dark">
+                <h5 class="modal-title" id="rewardsModalLabel">{{_('Portable Plots - 7/8 Reward Recovery')}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-dark">
+              {% autoescape false %}
+              {{_('Block rewards won by your portable plots %(wikilink_open)srequire recovery%(wikilink_close)s.', 
+                wikilink_open='<a href="https://github.com/guydavis/machinaris/wiki/Wallets#claim-rewards" class="text-white" target="_blank">', wikilink_close='</a>')}}
+              <br/>
+              {{_('This is an experimental feature.  Try %(atb_open)sAllTheBlocks%(atb_close)s if any issue.', 
+                atb_open='<a href="https://alltheblocks.net/nft-recovery" class="text-white" target="_blank">', atb_close='</a>')}}
+              {% endautoescape %}
+              <div id="rewards_table"></div>
+            </div>
+            <div class="modal-footer bg-dark">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="btnCancelRewards">{{_('Cancel')}}</button>
+                <button type="button" class="btn btn-outline-success" id="btnConfirmRecover">{{_('Recover')}}</button>
+            </div>
+          </form>
+        </div>
+    </div>
+</div>
+
 <header class="pb-3 mb-4 border-bottom">
-    <span class="fs-4">{{_('Wallet Summary')}}</span>
+    <button type="button" class="btn btn-success fw-bold" style="float:right; margin-right:150px" data-bs-toggle="modal" 
+      data-bs-target="#rewardsModal">{{_('Claim Rewards')}}</button>
+    <span class="fs-4">{{_('Wallet Summary')}} {{ chart_data.last_value }} </span>
 </header>
+
+{% if chart_data.dates|length > 0 %}
+<div class="col-md-12" style="margin-top:5px; margin-bottom:25px;">
+  <div class="h-100 p-2 text-white bg-dark rounded-3">
+    <div style="position: relative; height: 300px">
+      <canvas id="total_balance_chart"></canvas>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 {% if wallets.rows|length > 0 %}
 <form method="POST" id="wallet-form" style="padding-bottom: 10px;">
@@ -113,23 +185,32 @@
                 <th scope="col" class="text-success">{{_('Balance')}} {{local_cur_sym}}</th>
                 <th scope="col" class="text-success">{{_('Updated At')}}</th>
                 <th scope="col" class="text-success"></th>
+                <th scope="col" class="text-success"></th>
             </tr>
         </thead>
         <tbody>
             {% for wallet in wallets.rows %}
             <tr>
-                <td>{{wallet.blockchain}}</td>
+                <td><a href="#" class="text-white" title="{{_('View Transactions')}}" onclick="ViewTransactions('{{wallet.blockchain}}','1');return false;">{{wallet.blockchain}}</a></td>
                 <td>
                     {% if wallet.status == 'Offline' %}
                       <i class="bi-dash-circle text-danger"></i> &nbsp; {{_('Offline')}}
+                    {% elif wallet.status == 'Paused' or wallet.service == 'paused' %}
+                      <i class="bi-pause-circle"></i> &nbsp; 
+                      <a class="text-white" title="{{_('Start Wallet')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{wallet.hostname}}" data-bs-blockchain="{{wallet.blockchain}}" data-bs-action="start">{{_('Paused')}}</a>
                     {% elif wallet.status.lower().startswith('synced') %}
-                      <i class="bi-check-circle text-success"></i> &nbsp; {{_('Synced')}}
+                      <i class="bi-check-circle text-success"></i> &nbsp;
+                      <a class="text-white" title="{{_('Pause Wallet')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{wallet.hostname}}" data-bs-blockchain="{{wallet.blockchain}}" data-bs-action="pause">{{_('Synced')}}</a>
                     {% elif wallet.status.lower().startswith('syncing') %}
-                      <i class="bi-check-circle text-warning"></i> &nbsp; {{_('Syncing')}}
-                      {% elif wallet.status.lower().startswith('not synced') %}
-                      <i class="bi-check-circle text-danger"></i> &nbsp; {{_('Not Synced')}}
+                      <i class="bi-exclamation-triangle text-warning"></i> &nbsp;
+                      <a class="text-white" title="{{_('Pause Wallet')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{wallet.hostname}}" data-bs-blockchain="{{wallet.blockchain}}" data-bs-action="pause">{{_('Syncing')}}</a>
+                    {% elif wallet.status.lower().startswith('not synced') %}
+                      <i class="bi-dash-circle text-danger"></i> &nbsp; 
+                      <a class="text-white" title="{{_('Pause Wallet')}}" href="#" data-bs-toggle="modal" data-bs-target="#restartModal" data-bs-hostname="{{wallet.hostname}}" data-bs-blockchain="{{wallet.blockchain}}" data-bs-action="pause">{{_('Not Synced')}}</a>
                     {% else %}
-                      <i class="bi-exclamation-triangle text-warning"></i> &nbsp; {{wallet.status}}
+                      <i class="bi-exclamation-triangle text-warning"></i> 
+                      &nbsp; 
+                      {{wallet.status}}
                     {% endif %} 
                 </td>
                 <td>{{wallet.hot_balance}}</td>
@@ -137,7 +218,10 @@
                 <td>{{wallet.total_balance}} {{wallet.blockchain_symbol}}</td>
                 <td>{{wallet.fiat_balance}}</td>
                 <td>{{wallet.updated_at | datetimefilter}}</td>
-                <td class='edit_cell'><a href="#" title="{{_('Edit Wallet')}}" data-bs-toggle="modal" 
+                <td class='icon_cell'><a 
+                  href="#" title="{{_('Chart Wallet')}}" onclick='PopupChart("wallet_balances","{{ wallet.blockchain }}");return false;'>
+                  <i class="fs-4 bi-graph-up-arrow"></i></a></td>
+                <td class='icon_cell'><a href="#" title="{{_('Edit Wallet')}}" data-bs-toggle="modal" 
                     data-bs-target="#walletModal" data-bs-blockchain="{{wallet.blockchain}}"
                     data-bs-cold-wallet-address="{{wallet.cold_address}}"><i 
                     class="fs-4 bi-pencil-square"></i></a></td>
@@ -164,7 +248,7 @@
             {% for wallet in wallets.rows %}
             <div class="tab-pane {% if wallet.blockchain == selected_blockchain %}active{% endif %}" id="{{wallet.blockchain}}" role="tabpanel" aria-labelledby="{{wallet.blockchain}}-tab">
                 <br/>
-                <pre>{{ wallet.details}}</pre>
+                <pre>{{ wallet.details|safe}}</pre>
             </div>
             {% endfor %}
         </div>
@@ -183,8 +267,9 @@
 <script>
         $(document).ready(function () {
             $('#data').DataTable({
+                "stateSave": true,
                 "pageLength": 25,
-                "columnDefs": [{ "orderable": false, targets: [7] }],
+                "columnDefs": [{ "orderable": false, targets: [7,8] }],
                 {% if lang != 'en' %}
                 "language": {
                     "url": "{{ url_for('static', filename='3rd_party/i18n/datatables.'+lang+'.json') }}"
@@ -207,6 +292,22 @@
                 );
                 $("#wallet-form").submit();
             });
+            $("#btnRestart").click(function () {
+                $("#btnCancel").prop("disabled", true);
+                $(this).prop("disabled", true);
+                $(this).html(
+                    `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...`
+                );
+                $("#restart-form").submit();
+            });
+            $("#btnConfirmRecover").click(function () {
+                $("#btnCancelRewards").prop("disabled", true);
+                $(this).prop("disabled", true);
+                $(this).html(
+                    `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...`
+                );
+                $("#rewards-form").submit();
+            });
             var walletModal = document.getElementById('walletModal')
             walletModal.addEventListener('show.bs.modal', function (event) {
                 var button = event.relatedTarget
@@ -217,8 +318,197 @@
                 var coldWalletAddressField = document.getElementById('cold_wallet_address_field')
                 coldWalletAddressField.value = coldWalletAddress
                 var modalTitle = walletModal.querySelector('.modal-title')
-                modalTitle.textContent = 'Wallet Settings - ' + blockchain
+                modalTitle.textContent = "{{_('Wallet Settings')}} - " + blockchain
             })
-        })
+            var restartModal = document.getElementById('restartModal')
+              restartModal.addEventListener('show.bs.modal', function (event) {
+                  var button = event.relatedTarget
+                  var hostname = button.getAttribute('data-bs-hostname')
+                  var hostnameField = document.getElementById('hostname_field')
+                  hostnameField.value = hostname
+                  var blockchain = button.getAttribute('data-bs-blockchain')
+                  var walletBlockchainField = document.getElementById('wallet_blockchain_field')
+                  walletBlockchainField.value = blockchain
+                  var action = button.getAttribute('data-bs-action')
+                  var actionField = document.getElementById('action_field')
+                  actionField.value = action
+                  var restartModalLabel = document.getElementById('restartModalLabel')
+                  var restartModalMessage = document.getElementById('restartModalMessage')
+                  var modalTitle = restartModal.querySelector('.modal-title')
+                  var btnRestart = document.getElementById('btnRestart')
+                  if (action == 'start') {
+                    restartModalLabel.value = "{{_('Start Wallet')}}"
+                    modalTitle.textContent = "{{_('Start Wallet')}} - " + blockchain
+                    btnRestart.textContent = "{{_('Start')}}"
+                    restartModalMessage.textContent = "{{_('This will start the blockchain\'s wallet.  Please allow at least 15 minutes afterwards for services to reconnect before attempting another action.  Your patience is appreciated! Continue anyway?')}}"
+                  } else {
+                    restartModalLabel.value = "{{_('Pause Wallet')}}"
+                    modalTitle.textContent = "{{_('Pause Wallet')}} - " + blockchain
+                    btnRestart.textContent = "{{_('Pause')}}"
+                    restartModalMessage.textContent = "{{_('This will pause the blockchain\'s wallet.  Please allow a few minutes for this to be reflected on this page.  Your patience is appreciated! Continue anyway?')}}"
+                  }
+              })
+              var rewardsModal = document.getElementById('rewardsModal')
+              rewardsModal.addEventListener('show.bs.modal', function (event) {
+                load_rewards();
+              });
+            })
+        function ViewRewardsLog(hostname, blockchain) {
+            var d = new Date();
+            var height = 600;
+            var width = 900;
+            var top = (screen.height - height) / 2;
+            var left = (screen.width - width) / 2;
+            window.open("{{ url_for('logs') }}?log=rewards" + "&hostname=" + hostname + "&blockchain=" + blockchain, '{{_('Reward Recovery Log for ')}}' + blockchain + ' - ' + hostname, 'resizeable=yes,scrollbars=yes,height=' + height + ',width=' + width + ',top=' + top + ',left=' + left).focus();
+        }
+        function load_rewards() {
+            jqxhr = $.getJSON({
+                url: "{{ url_for('wallet') }}?rewards=get",
+            })
+                .done(function (data) {
+                    if (Object.entries(data).length > 0) {
+                      html = "<table class='table table-dark table-striped'><thead><tr><th>Blockchain</th><th>Recoverable Coins</th><th>Log</th></tr></thead><tbody>";
+                      for (const [blockchain_hostname, amount] of Object.entries(data)) {
+                          var [blockchain, hostname] = blockchain_hostname.split('|');
+                          html += "<tr><td>" + blockchain + "</td><td>" + amount + "</td>";
+                          html += "<td class='icon_cell'><a href='#' title='" + "{{_('View Recovery Log')}}" + "' onclick='ViewRewardsLog(\""+hostname+"\",\""+blockchain+"\");return false;'><i class='fs-4 bi-file-text'></i></a></td>";
+                          html += "</tr>";
+                      }
+                      html += "</tbody></table>";
+                      html += "{{_('Continue with recovery for rewards older than one week?')}}";
+                      $("#rewards_table").html(html);
+                      $("#btnConfirmRecover").show();
+                    } else {
+                      $("#rewards_table").html("<br>{{_('Sorry, no recoverable coins currently.  Please check back later.')}}");
+                      $("#btnConfirmRecover").hide();
+                    }
+                }).fail(function (jqXHR, textStatus, errorThrown) {
+                    console.log("jqXHR, textStatus, errorThrown");
+                });
+        }
+        function ViewTransactions(blockchain, wallet_id) {
+          var d = new Date();
+          var height = 600;
+          var width = 900;
+          var top = (screen.height - height) / 2;
+          var left = (screen.width - width) / 2;
+          window.open("{{ url_for('transactions') }}?blockchain=" + blockchain + "&selected_wallet_id=" + wallet_id, blockchain + '{{_(' Transactions')}}: {{_('Wallet ID')}}#'+wallet_id, 'resizeable=yes,scrollbars=yes,height=' + height + ',width=' + width + ',top=' + top + ',left=' + left).focus();
+        }
+        function PopupChart(chart_type, blockchain) {
+          var d = new Date();
+          var height = 600;
+          var width = 900;
+          var top = (screen.height - height) / 2;
+          var left = (screen.width - width) / 2;
+          window.open("{{ url_for('chart') }}?type=" + chart_type + "&blockchain=" + blockchain, blockchain + ' - ' + chart_type, 'resizeable=yes,scrollbars=yes,height=' + height + ',width=' + width + ',top=' + top + ',left=' + left).focus();
+        }
+        const COLORS = [
+          '#3aac59',
+          // https://www.chartjs.org/docs/master/samples/utils.html
+          //'#4dc9f6',
+          '#f67019',
+          '#f53794',
+          //'#537bc4',
+          '#acc236',
+          //'#166a8f',
+          //'#00a950',
+          //'#58595b',
+          '#8549ba',
+          // https://colorbrewer2.org/#type=qualitative&scheme=Paired&n=9
+          '#a6cee3',
+          '#1f78b4',
+          '#b2df8a',
+          '#33a02c',
+          '#fb9a99',
+          '#e31a1c',
+          '#fdbf6f',
+          '#ff7f00',
+          '#cab2d6',
+          // https://learnui.design/tools/data-color-picker.html#palette
+          '#003f5c',
+          '#2f4b7c',
+          '#665191',
+          '#a05195',
+          '#d45087',
+          '#f95d6a',
+          '#ff7c43',
+          '#ffa600',
+        ];
+
+        function color(index) {
+          return COLORS[index % COLORS.length];
+        }
+
+    {% if chart_data.dates|length > 0 %}
+        var ctx = document.getElementById('total_balance_chart');
+        var myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_data.dates | safe }},
+                datasets: [
+                    {
+                      label: "{{ chart_data.title }}",
+                      data: {{ chart_data.vals | safe }},
+                      backgroundColor: color(0),
+                    },
+                ],
+            },
+            borderWidth: 1,
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {  
+                legend: {
+                    labels: {
+                    color: "#c7c7c7",  
+                    font: {
+                      size: 18 
+                    }
+                  }
+                }
+              },
+              scales: {
+                  x: {
+                      type: 'time',
+                      time: {
+                          unit: 'day',
+                          tooltipFormat: 'DD T'
+                      },
+                      ticks: {
+                          color: "#c7c7c7",
+                          font: {
+                            size: 16 
+                          }  
+                      },
+                      title: {
+                          display: true,
+                          text: "{{_('Date')}}",
+                          color: "#c7c7c7",  
+                          font: {
+                            size: 18 
+                          }
+                      }
+                  },
+                  y: {
+                      ticks: {
+                          color: "#c7c7c7",  
+                          font: {
+                            size: 16 
+                          }
+                      },
+                      beginAtZero: true,
+                      title: {
+                          display: true,
+                          text: "{{ chart_data.y_axis_title }}",
+                          color: "#c7c7c7",  
+                          font: {
+                            size: 18 
+                          }
+                      }
+                  }
+              }
+            }
+          });
+    {% endif %}
 </script>
 {% endblock %}
